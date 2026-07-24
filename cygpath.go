@@ -1,3 +1,5 @@
+//go:build cygpath
+
 package main
 
 import (
