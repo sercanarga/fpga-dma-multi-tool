@@ -1,0 +1,36 @@
+FPGA DMA Multi Tool - Third-Party Notices
+=========================================
+
+WCH CH341PAR 2.6
+----------------
+Source: https://www.wch-ic.com/downloads/CH341PAR_EXE.html
+Publisher: Nanjing Qinheng Microelectronics Co., Ltd.
+The official package states that it is Microsoft WHQL/HCK certified and may be
+distributed with a product. The build keeps the original signed package and
+driver files unchanged.
+
+FTDI D3XX 1.3.0.10
+------------------
+Source: https://ftdichip.com/drivers/d3xx-drivers/
+Publisher: Future Technology Devices International Limited
+License: https://ftdichip.com/driver-licence-terms/
+The bundled x64 ftdibus3 driver files are unchanged from the official
+WHQL-certified package and are intended for genuine FT600/FT601 devices.
+
+dma-speedtest-memflow-rs 3.2.0
+------------------------------
+Source: https://github.com/sh1ftd/dma-speedtest-memflow-rs
+License: GNU Affero General Public License version 3
+The complete license text is included as LICENSE-dma-speedtest-AGPL-3.0.txt.
+The application launches the upstream command-line executable and reads its
+JSON report; the executable and its runtime libraries remain separate files.
+
+openFPGALoader 1.1.1
+--------------------
+Source: https://github.com/trabucayre/openFPGALoader/releases/tag/v1.1.1
+License: Apache License 2.0
+The Windows executable is built from the tagged source with Xilinx and XVC
+client support. Its XVC socket layer uses Winsock2. MinGW libgcc, libstdc++,
+libwinpthread, and zlib are linked statically; their license and runtime
+exception texts are included under openFPGALoader/licenses/. The Artix-7
+JTAG-to-SPI bridge files are included unchanged.

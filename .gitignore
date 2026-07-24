@@ -1,0 +1,7 @@
+/bin/
+/fyne-cross/
+/fpga-dma-multi-tool.exe
+/fpga-dma-multi-tool.exe.manifest
+/runtime/windows/openFPGALoader/cygpath.exe
+.DS_Store
+coverage.out

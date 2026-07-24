@@ -1,0 +1,8 @@
+openFPGALoader v1.1.1
+Source: https://github.com/trabucayre/openFPGALoader
+Commit: 85be4fa02b2dd6a83716d7dfac3d25bbd260ff7b
+Target: Windows x86-64
+Features: Xilinx, XVC client, gzip
+Runtime: MinGW libgcc, libstdc++, libwinpthread and zlib linked statically
+Windows adaptations: Winsock2 XVC client with complete-response reads;
+direct-SPI guard for minimal builds
