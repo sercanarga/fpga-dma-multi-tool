@@ -5,11 +5,11 @@ A compact Windows utility for detecting, configuring, and testing supported Arti
 ## Preview
 
 <p align="center">
-  <img src="screenshot-devices.png" width="49%" alt="FPGA device detection">
-  <img src="screenshot-flash.png" width="49%" alt="FPGA flash and SRAM programming">
-  <img src="screenshot-speed-test.png" width="49%" alt="DMA speed test">
-  <img src="screenshot-device-history.png" width="49%" alt="Windows device history">
-  <img src="screenshot-drivers.png" width="49%" alt="Windows driver management">
+  <img src="assets/screenshots/devices.png" width="49%" alt="FPGA device detection">
+  <img src="assets/screenshots/flash.png" width="49%" alt="FPGA flash and SRAM programming">
+  <img src="assets/screenshots/speed-test.png" width="49%" alt="DMA speed test">
+  <img src="assets/screenshots/device-history.png" width="49%" alt="Windows device history">
+  <img src="assets/screenshots/drivers.png" width="49%" alt="Windows driver management">
 </p>
 
 ## Features

@@ -1,8 +1,7 @@
 /bin/
 /.build-source/
+/.build-cygpath.exe
 /fyne-cross/
-/fpga-dma-multi-tool.exe
-/fpga-dma-multi-tool.exe.manifest
-/cygpath.exe
+/Icon.png
 .DS_Store
 coverage.out
