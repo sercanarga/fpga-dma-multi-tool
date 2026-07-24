@@ -3,6 +3,7 @@
 GO ?= go
 GOFLAGS := -trimpath
 LDFLAGS := -s -w
+VERSION ?= 2.0.0
 FYNE_CROSS ?= $(shell $(GO) env GOPATH)/bin/fyne-cross
 
 BUILD_SOURCE := .build-source
@@ -25,6 +26,9 @@ vet:
 
 build-windows:
 	@test -x "$(FYNE_CROSS)" || { echo "fyne-cross is required" >&2; exit 1; }
+	@case "$(VERSION)" in \
+		""|*[!0-9A-Za-z.-]*) echo "VERSION contains invalid characters" >&2; exit 1;; \
+	esac
 	@command -v shasum >/dev/null 2>&1 || { echo "shasum is required" >&2; exit 1; }
 	@command -v strings >/dev/null 2>&1 || { echo "strings is required" >&2; exit 1; }
 	@command -v zip >/dev/null 2>&1 || { echo "zip is required" >&2; exit 1; }
@@ -41,9 +45,11 @@ build-windows:
 	@rm -rf "$(BUILD_SOURCE)"
 	@mkdir -p "$(BUILD_SOURCE)"
 	@cp *.go go.mod go.sum "$(BUILD_SOURCE)/"
+	@sed 's/^var version = ".*"$$/var version = "$(VERSION)"/' \
+		main.go > "$(BUILD_SOURCE)/main.go"
 	@cp windows-require-admin.manifest "$(BUILD_SOURCE)/fpga-dma-multi-tool.exe.manifest"
 	@$(FYNE_CROSS) windows -arch=amd64 \
-		-app-id com.sercanarga.fpgadmamultitool -app-version 2.0.0 \
+		-app-id com.sercanarga.fpgadmamultitool -app-version "$(VERSION)" \
 		-name fpga-dma-multi-tool.exe -env GOTOOLCHAIN=auto \
 		-dir "$(CURDIR)/$(BUILD_SOURCE)" .
 	@rm -f Icon.png

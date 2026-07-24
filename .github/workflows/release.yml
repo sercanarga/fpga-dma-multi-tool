@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v2.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must use semantic version format, for example v2.0.0" >&2
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Fyne cross compiler
+        run: go install github.com/fyne-io/fyne-cross@v1.6.2
+
+      - name: Build Windows package
+        run: |
+          version="${RELEASE_TAG#v}"
+          make build-windows VERSION="$version"
+
+      - name: Verify package
+        run: unzip -t bin/FPGA-DMA-Multi-Tool-Windows-x64.zip
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              bin/FPGA-DMA-Multi-Tool-Windows-x64.zip \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              bin/FPGA-DMA-Multi-Tool-Windows-x64.zip \
+              --target "$GITHUB_SHA" \
+              --title "FPGA DMA Multi Tool $RELEASE_TAG" \
+              --generate-notes
+          fi
