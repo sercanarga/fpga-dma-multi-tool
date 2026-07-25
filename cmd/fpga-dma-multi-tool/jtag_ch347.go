@@ -19,7 +19,21 @@ const (
 )
 
 func scanAutomatic(ctx context.Context, opts options, diagnostics io.Writer) ([]deviceResult, error) {
-	return scanCH347(ctx, opts, diagnostics)
+	devices, ch347Err := scanCH347(ctx, opts, diagnostics)
+	if ch347Err == nil {
+		return devices, nil
+	}
+	if opts.verbose {
+		fmt.Fprintf(diagnostics, "CH347 scan failed: %v\n", ch347Err)
+	}
+	devices, rs232Err := scanRS232(ctx, opts, diagnostics)
+	if rs232Err == nil {
+		return devices, nil
+	}
+	return nil, fmt.Errorf(
+		"no supported adapter could read the FPGA (CH347: %v; RS232: %v)",
+		ch347Err, rs232Err,
+	)
 }
 
 func buildCH347BitCommand(tms, tdi []byte) ([]byte, error) {

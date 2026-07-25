@@ -60,7 +60,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var opts options
 	flags := flag.NewFlagSet("fpga-dma-multi-tool", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&opts.backend, "backend", "auto", "backend: auto, ch347, or xvc")
+	flags.StringVar(&opts.backend, "backend", "auto", "backend: auto, ch347, rs232, or xvc")
 	flags.StringVar(&opts.xvcAddress, "xvc", "", "XVC server address for direct JTAG, for example 127.0.0.1:2542")
 	flags.IntVar(&opts.device, "device", -1, "JTAG chain index for a direct backend; -1 reads all")
 	flags.StringVar(&opts.ch347DLL, "ch347-dll", "", "optional path to CH347DLLA64.DLL")
@@ -147,6 +147,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		devices, err = scanAutomatic(ctx, opts, stderr)
 	case "ch347":
 		devices, err = scanCH347(ctx, opts, stderr)
+	case "rs232":
+		devices, err = scanRS232(ctx, opts, stderr)
 	case "xvc":
 		devices, err = scanXVC(ctx, opts, stderr)
 	default:
@@ -186,9 +188,9 @@ func selectBackend(opts options) (string, error) {
 			return "xvc", nil
 		}
 		return "auto", nil
-	case "ch347":
+	case "ch347", "rs232":
 		if opts.xvcAddress != "" {
-			return "", errors.New("--xvc cannot be combined with --backend ch347")
+			return "", fmt.Errorf("--xvc cannot be combined with --backend %s", backend)
 		}
 		return backend, nil
 	case "xvc":
@@ -197,7 +199,7 @@ func selectBackend(opts options) (string, error) {
 		}
 		return backend, nil
 	default:
-		return "", fmt.Errorf("invalid --backend %q (expected auto, ch347, or xvc)", opts.backend)
+		return "", fmt.Errorf("invalid --backend %q (expected auto, ch347, rs232, or xvc)", opts.backend)
 	}
 }
 

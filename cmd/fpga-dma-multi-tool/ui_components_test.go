@@ -158,6 +158,36 @@ func TestWinUIChoiceHidesCurrentSelectionFromMenu(t *testing.T) {
 	}
 }
 
+func TestSegmentedControlKeepsOneVisibleSelection(t *testing.T) {
+	application := fyneTest.NewApp()
+	defer application.Quit()
+	application.Settings().SetTheme(newWinUITheme())
+
+	control := newWinUISegmentedControl([]string{"Auto", "CH347", "RS232"})
+	if control.Value() != "Auto" {
+		t.Fatalf("initial value = %q, want Auto", control.Value())
+	}
+	if control.buttons["Auto"].Importance != widget.HighImportance {
+		t.Fatal("initial segment is not highlighted")
+	}
+
+	control.buttons["RS232"].Tapped(nil)
+	if control.Value() != "RS232" {
+		t.Fatalf("value after tap = %q, want RS232", control.Value())
+	}
+	if control.buttons["RS232"].Importance != widget.HighImportance {
+		t.Fatal("selected segment is not highlighted")
+	}
+	if control.buttons["Auto"].Importance == widget.HighImportance {
+		t.Fatal("previous segment remained highlighted")
+	}
+
+	control.SetSelected("unsupported")
+	if control.Value() != "RS232" {
+		t.Fatal("unsupported selection changed the current value")
+	}
+}
+
 func TestTapTargetRunsAction(t *testing.T) {
 	called := false
 	target := newTapTarget(func() { called = true })

@@ -13,8 +13,8 @@ func scanDeviceHistory(context.Context) ([]deviceHistoryEntry, error) {
 	return nil, errDeviceHistoryUnavailable
 }
 
-func removeDeviceHistory(context.Context, deviceHistoryEntry) (deviceHistoryCleanupResult, error) {
-	return deviceHistoryCleanupResult{}, errDeviceHistoryUnavailable
+func removeDeviceHistory(context.Context, deviceHistoryEntry) error {
+	return errDeviceHistoryUnavailable
 }
 
 func rescanWindowsDevices(context.Context) error {

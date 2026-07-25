@@ -42,6 +42,7 @@ func TestSelectBackend(t *testing.T) {
 		{name: "auto xvc", opts: options{backend: "auto", xvcAddress: "localhost:2542"}, want: "xvc"},
 		{name: "explicit xvc", opts: options{backend: "xvc", xvcAddress: "localhost:2542"}, want: "xvc"},
 		{name: "explicit ch347", opts: options{backend: "ch347"}, want: "ch347"},
+		{name: "explicit rs232", opts: options{backend: "rs232"}, want: "rs232"},
 		{name: "missing xvc address", opts: options{backend: "xvc"}, wantErr: true},
 		{name: "unsupported backend", opts: options{backend: "removed"}, wantErr: true},
 	}
@@ -55,6 +56,54 @@ func TestSelectBackend(t *testing.T) {
 				t.Errorf("selectBackend() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestParseOpenFPGALoaderChain(t *testing.T) {
+	output := `index 0:
+	idcode 0x13631093
+	manufacturer xilinx
+	family artix a7 100t
+	model  xc7a100
+	irlength 6
+index 1:
+	idcode 0x03632093
+	manufacturer xilinx
+	family artix a7 75t
+	model  xc7a75
+	irlength 6
+`
+	devices, err := parseOpenFPGALoaderChain(output)
+	if err != nil {
+		t.Fatalf("parseOpenFPGALoaderChain() error = %v", err)
+	}
+	if len(devices) != 2 {
+		t.Fatalf("device count = %d, want 2", len(devices))
+	}
+	if devices[0].Index != 0 || devices[0].IDCode != 0x13631093 {
+		t.Fatalf("device 0 = %+v", devices[0])
+	}
+	if devices[1].Index != 1 || devices[1].IDCode != 0x03632093 {
+		t.Fatalf("device 1 = %+v", devices[1])
+	}
+}
+
+func TestParseOpenFPGALoaderChainRejectsMissingIndex(t *testing.T) {
+	output := "index 1:\n\tidcode 0x03631093\n"
+	if _, err := parseOpenFPGALoaderChain(output); err == nil {
+		t.Fatal("parseOpenFPGALoaderChain() accepted a non-contiguous chain")
+	}
+}
+
+func TestParseOpenFPGALoaderDNA(t *testing.T) {
+	dna, err := parseOpenFPGALoaderDNA(
+		"programmer details\r\n{\"dna\": \"0x0123456789abcdef\"}\r\n",
+	)
+	if err != nil {
+		t.Fatalf("parseOpenFPGALoaderDNA() error = %v", err)
+	}
+	if dna != 0x0123456789ABCDEF {
+		t.Fatalf("DNA = 0x%016X", dna)
 	}
 }
 

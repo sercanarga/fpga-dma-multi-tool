@@ -29,10 +29,20 @@ $present = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalI
 Get-PnpDevice -PresentOnly -ErrorAction Stop | ForEach-Object {
     if ($_.InstanceId) { $null = $present.Add([string]$_.InstanceId) }
 }
-$devices = @(Get-PnpDevice -ErrorAction Stop | Where-Object {
-    $_.InstanceId -match '^(PCI|USB)\\'
-} | ForEach-Object {
+$seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$devices = [Collections.Generic.List[object]]::new()
+Get-PnpDevice -ErrorAction Stop | ForEach-Object {
+    if ([string]::IsNullOrWhiteSpace([string]$_.InstanceId)) {
+        return
+    }
     $segments = @([string]$_.InstanceId -split '\\', 3)
+    if ($segments.Count -ne 3 -or
+        [string]::IsNullOrWhiteSpace($segments[0]) -or
+        [string]::IsNullOrWhiteSpace($segments[1]) -or
+        [string]::IsNullOrWhiteSpace($segments[2]) -or
+        $segments[0] -notmatch '^[A-Za-z0-9_.-]+$') {
+        return
+    }
     $name = [string]$_.FriendlyName
     if ([string]::IsNullOrWhiteSpace($name)) {
         $name = [string]$_.Class
@@ -40,17 +50,59 @@ $devices = @(Get-PnpDevice -ErrorAction Stop | Where-Object {
     if ([string]::IsNullOrWhiteSpace($name)) {
         $name = [string]$_.InstanceId
     }
-    [pscustomobject]@{
-        Type = $segments[0]
-        HardwareId = $segments[1]
+    $devices.Add([pscustomobject]@{
+        Enumerator = $segments[0]
+        DeviceId = $segments[1]
         InstanceId = $segments[2]
+        Class = [string]$_.Class
         FriendlyName = $name
-        Driver = ''
-        ControlSets = @()
         Present = $present.Contains([string]$_.InstanceId)
+    })
+    $null = $seen.Add([string]$_.InstanceId)
+}
+
+# Device Manager's hidden-device view is backed by the Enum registry tree.
+# Merge any historical instance that Get-PnpDevice did not return so stale
+# WPD, AudioEndpoint, HDAUDIO, Bluetooth and storage nodes remain visible.
+$enumRoot = 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum'
+Get-ChildItem -LiteralPath $enumRoot -ErrorAction Stop | ForEach-Object {
+    $enumerator = [string]$_.PSChildName
+    if ($enumerator -notmatch '^[A-Za-z0-9_.-]+$') {
+        return
     }
-} | Sort-Object Type, FriendlyName, HardwareId, InstanceId)
-@{ Devices = $devices } | ConvertTo-Json -Depth 4 -Compress
+    Get-ChildItem -LiteralPath $_.PSPath -ErrorAction SilentlyContinue | ForEach-Object {
+        $deviceId = [string]$_.PSChildName
+        Get-ChildItem -LiteralPath $_.PSPath -ErrorAction SilentlyContinue | ForEach-Object {
+            $instanceId = [string]$_.PSChildName
+            $fullId = $enumerator + '\' + $deviceId + '\' + $instanceId
+            if ($seen.Contains($fullId)) {
+                return
+            }
+            $properties = Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+            $class = [string]$properties.Class
+            $name = [string]$properties.FriendlyName
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                $name = [string]$properties.DeviceDesc
+                $name = $name -replace '^@[^;]+;', ''
+            }
+            if ([string]::IsNullOrWhiteSpace($name)) {
+                $name = $fullId
+            }
+            $devices.Add([pscustomobject]@{
+                Enumerator = $enumerator
+                DeviceId = $deviceId
+                InstanceId = $instanceId
+                Class = $class
+                FriendlyName = $name
+                Present = $present.Contains($fullId)
+            })
+            $null = $seen.Add($fullId)
+        }
+    }
+}
+
+$sorted = @($devices | Sort-Object Class, FriendlyName, Enumerator, DeviceId, InstanceId)
+@{ Devices = $sorted } | ConvertTo-Json -Depth 4 -Compress
 `
 	command := exec.CommandContext(
 		ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive",
@@ -71,30 +123,33 @@ $devices = @(Get-PnpDevice -ErrorAction Stop | Where-Object {
 func removeDeviceHistory(
 	ctx context.Context,
 	device deviceHistoryEntry,
-) (deviceHistoryCleanupResult, error) {
+) error {
 	instanceID := deviceHistoryInstanceID(device)
+	if _, err := deviceEnumRegistryPath(instanceID); err != nil {
+		return err
+	}
 	present, err := deviceInstanceIsPresent(ctx, instanceID)
 	if err != nil {
-		return deviceHistoryCleanupResult{}, err
+		return err
 	}
 	if present {
-		return deviceHistoryCleanupResult{}, fmt.Errorf("disconnect the device before removing its history")
+		return fmt.Errorf("disconnect the device before removing its history")
 	}
 
 	command := exec.CommandContext(ctx, "pnputil.exe", "/remove-device", instanceID)
 	configureChildProcess(command)
 	output, err := command.CombinedOutput()
 	if err != nil {
-		return deviceHistoryCleanupResult{}, fmt.Errorf(
+		return fmt.Errorf(
 			"Windows could not remove the selected device history: %w\n%s",
 			err,
 			strings.TrimSpace(string(output)),
 		)
 	}
 	if err := verifyDeviceHistoryRemoved(ctx, instanceID); err != nil {
-		return deviceHistoryCleanupResult{}, err
+		return err
 	}
-	return deviceHistoryCleanupResult{}, nil
+	return nil
 }
 
 func deviceInstanceIsPresent(ctx context.Context, instanceID string) (bool, error) {
