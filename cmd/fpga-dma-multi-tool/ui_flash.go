@@ -116,11 +116,8 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 		widget.NewFormItem("Writer", writerSelector.Object),
 		widget.NewFormItem("Mode", mode),
 	)
-	writerHint := widget.NewLabel("Auto uses CH347 first, then falls back to RS232.")
-	writerHint.Wrapping = fyne.TextWrapWord
 	controls := container.NewVBox(
 		form,
-		writerHint,
 		container.NewBorder(
 			nil,
 			nil,
