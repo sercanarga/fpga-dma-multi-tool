@@ -69,8 +69,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.BoolVar(&opts.json, "json", false, "emit machine-readable JSON")
 	flags.BoolVar(&opts.verbose, "verbose", false, "show backend diagnostics")
 	showVersion := flags.Bool("version", false, "show version")
-	programmerCheck := flags.Bool("programmer-check", false, "check the bundled programmer through the CH347 bridge")
-	programFile := flags.String("program-file", "", "program a .bit or .bin file through CH347")
+	programmerCheck := flags.Bool("programmer-check", false, "check the selected FPGA programmer")
+	programFile := flags.String("program-file", "", "program a .bit or .bin file")
+	programmer := flags.String("programmer", "auto", "programmer: auto, ch347, or rs232")
 	programModeFlag := flags.String("program-mode", "sram", "program mode: sram or flash")
 	programPart := flags.String("fpga-part", "xc7a100t", "FPGA model used for programming")
 	programChainIndex := flags.Int("chain-index", 0, "zero-based JTAG chain index used for programming")
@@ -99,17 +100,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--programmer-check cannot be combined with --program-file")
 		return 2
 	}
+	programmingCable, err := programmingCableFromName(*programmer)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 2
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 	if *programmerCheck {
-		if err := runProgrammerCheck(ctx, stderr); err != nil {
+		if err := runProgrammerCheck(ctx, programmingCable, stderr); err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, "Bundled programmer and CH347 bridge are ready.")
+		fmt.Fprintln(stdout, "Bundled programmer is ready.")
 		return 0
 	}
 	if strings.TrimSpace(*programFile) != "" {
@@ -117,7 +123,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		request := programRequest{
 			FilePath:   strings.TrimSpace(*programFile),
 			Mode:       mode,
-			Cable:      directCH347ProgrammingCable,
+			Cable:      programmingCable,
 			FPGAPart:   strings.ToLower(strings.TrimSpace(*programPart)),
 			ChainIndex: *programChainIndex,
 		}

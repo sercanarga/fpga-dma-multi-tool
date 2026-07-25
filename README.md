@@ -18,7 +18,8 @@ A compact Windows utility for detecting, configuring, and testing supported Arti
 - Load bitstreams into SRAM or write persistent flash
 - Measure memory read and read/write performance
 - Review and remove disconnected Windows device-history entries
-- Install and remove the bundled CH347 and FTDI D3XX drivers
+- Install and remove the bundled CH347, FTDI D3XX, and RS232 writer drivers
+- Program through CH347 or FTDI RS232 writers (0403:6011/6014 Interface A)
 
 ## Download
 

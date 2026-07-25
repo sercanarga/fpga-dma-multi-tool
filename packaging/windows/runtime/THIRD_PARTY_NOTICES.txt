@@ -17,6 +17,16 @@ License: https://ftdichip.com/driver-licence-terms/
 The bundled x64 ftdibus3 driver files are unchanged from the official
 WHQL-certified package and are intended for genuine FT600/FT601 devices.
 
+Zadig 2.9 / libwdi 1.5.1
+------------------------
+Source: https://github.com/pbatard/libwdi/releases/tag/v1.5.1
+Publisher: Akeo Consulting
+Licenses: GNU GPL version 3 or later (Zadig) and GNU LGPL version 3 or later
+(libwdi). The signed upstream executable, complete corresponding source archive,
+and both license texts are included under drivers/rs232/. It is used to install
+WinUSB only for the supported FTDI RS232 writer Interface 0 device selected by
+the user.
+
 dma-speedtest-memflow-rs 3.2.0
 ------------------------------
 Source: https://github.com/sh1ftd/dma-speedtest-memflow-rs

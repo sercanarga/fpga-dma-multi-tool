@@ -20,6 +20,8 @@ const (
 	programFlash programMode = "flash"
 
 	directCH347ProgrammingCable = "ch347-direct"
+	autoProgrammingCable        = "auto"
+	rs232ProgrammingCable       = "rs232"
 )
 
 type programTransport struct {
@@ -113,13 +115,13 @@ func runProgramming(ctx context.Context, request programRequest, logWriter io.Wr
 	return nil
 }
 
-func runProgrammerCheck(ctx context.Context, logWriter io.Writer) error {
+func runProgrammerCheck(ctx context.Context, cable string, logWriter io.Writer) error {
 	executable, err := findOpenFPGALoader("")
 	if err != nil {
 		return err
 	}
 	transport, err := prepareProgrammingTransport(ctx, programRequest{
-		Cable: directCH347ProgrammingCable,
+		Cable: cable,
 	})
 	if err != nil {
 		return err

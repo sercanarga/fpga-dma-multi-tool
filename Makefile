@@ -32,6 +32,8 @@ build-windows:
 	@echo "7375ff5e4e9584afc8b170ade5f2963f411e9f0ca9f35884fcb6f9f56a029f3b  $(WINDOWS_RUNTIME)/cli-dma-speedtest-memflow-rs.exe" | shasum -a 256 -c -
 	@echo "dc1817a34d018224ff023f4055bf9687a3a700500dce09bf37f775cc81e165e8  $(WINDOWS_RUNTIME)/drivers/wch/CH341WDM.CAT" | shasum -a 256 -c -
 	@echo "62cd5d5a6ce089086f4447ebad59aed783becece59ec42510eb862154278dcda  $(WINDOWS_RUNTIME)/drivers/ftdi/ftdibus3.cat" | shasum -a 256 -c -
+	@echo "4ecaa95df3da3621486a043aef8b3050b8bafe7c901402871e816229ef82039b  $(WINDOWS_RUNTIME)/drivers/rs232/zadig-2.9.exe" | shasum -a 256 -c -
+	@echo "a695e93db0977dfdc5c6a99a4ea91b22f9027547d0177b2a0f3075078643c929  $(WINDOWS_RUNTIME)/drivers/rs232/libwdi-1.5.1-source.tar.gz" | shasum -a 256 -c -
 	@cd "$(WINDOWS_RUNTIME)/openFPGALoader" && shasum -a 256 -c SHA256SUMS
 	@if strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | grep -Fq "support for xvc-client was not enabled at compile time"; then \
 		echo "openFPGALoader was built without XVC client support" >&2; exit 1; \
@@ -39,6 +41,12 @@ build-windows:
 	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
 		grep -Fq "detected %s version %s packet size" || \
 		{ echo "openFPGALoader XVC client marker is missing" >&2; exit 1; }
+	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
+		grep -Fq "ft4232" || \
+		{ echo "openFPGALoader FT4232 support marker is missing" >&2; exit 1; }
+	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
+		grep -Fq "ft232" || \
+		{ echo "openFPGALoader FT232H support marker is missing" >&2; exit 1; }
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) \
 		-ldflags "$(LDFLAGS)" -o "$(BUILD_CYGPATH)" ./cmd/cygpath
 	@rm -rf "$(BUILD_SOURCE)"

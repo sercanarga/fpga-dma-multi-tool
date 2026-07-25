@@ -641,6 +641,8 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	)
 	part.SetSelected("XC7A100T")
 	state.programPart = part
+	programmer := newWinUIChoice([]string{"Auto", "CH347", "RS232 writer"})
+	programmer.SetSelected("Auto")
 	status, statusBar := newStatusBar("Ready. Programming starts only after confirmation.")
 	logEntry := widget.NewMultiLineEntry()
 	logEntry.SetPlaceHolder("Progress will appear here.")
@@ -679,9 +681,16 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 			}
 		}
 		state.resultMu.RUnlock()
+		cable := autoProgrammingCable
+		switch programmer.Value() {
+		case "CH347":
+			cable = directCH347ProgrammingCable
+		case "RS232 writer":
+			cable = rs232ProgrammingCable
+		}
 		request := programRequest{
 			FilePath: selectedFilePath, Mode: selectedMode,
-			Cable:    directCH347ProgrammingCable,
+			Cable:    cable,
 			FPGAPart: strings.ToLower(part.Value()), ChainIndex: chainIndex,
 		}
 		if err := request.validate(); err != nil {
@@ -692,7 +701,10 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 		if selectedMode == programFlash {
 			action = "erase and write the board's persistent flash"
 		}
-		message := fmt.Sprintf("This will %s.\n\nFile: %s\nFPGA: %s", action, request.FilePath, part.Value())
+		message := fmt.Sprintf(
+			"This will %s.\n\nFile: %s\nFPGA: %s\nProgrammer: %s",
+			action, request.FilePath, part.Value(), programmer.Value(),
+		)
 		showWinUIConfirm(state.window, "Confirm programming", message, "Program", false, func() {
 			programButton.Disable()
 			logEntry.SetText("")
@@ -719,6 +731,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	form := widget.NewForm(
 		widget.NewFormItem("File", container.NewBorder(nil, nil, nil, chooseButton.Object, fileField)),
 		widget.NewFormItem("Target", outlinedSelect(part.Select)),
+		widget.NewFormItem("Programmer", outlinedSelect(programmer.Select)),
 		widget.NewFormItem("Mode", mode),
 	)
 	controls := container.NewVBox(
@@ -1158,7 +1171,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 		removeButton  *winUISecondaryButton
 	}
 
-	driverRows := make(map[string]*driverRow, 2)
+	driverRows := make(map[string]*driverRow, 3)
 	var setupButtons []*widget.Button
 	setSetupBusy := func(busy bool) {
 		for _, button := range setupButtons {
@@ -1265,6 +1278,31 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 			},
 		)
 	})
+	installRS232 := widget.NewButton("Install", func() {
+		showWinUIConfirm(
+			state.window,
+			"Install RS232 writer driver",
+			"Keep the RS232 writer connected. In Zadig, select only Quad RS232-HS/FT232H Interface 0 (0403:6011 or 0403:6014), choose WinUSB, then click Install/Replace Driver.",
+			"Open installer",
+			false,
+			func() {
+				runSetupAction("Installing RS232 writer WinUSB driver…", installRS232Driver)
+			},
+		)
+	})
+	installRS232.Importance = widget.HighImportance
+	removeRS232 := newWinUISecondaryButton("Remove", 88, func() {
+		showWinUIConfirm(
+			state.window,
+			"Remove RS232 writer driver",
+			"Remove only the WinUSB packages for FTDI 0403:6011/6014 Interface 0? Other FTDI interfaces and the D3XX driver are not changed.",
+			"Remove",
+			true,
+			func() {
+				runSetupAction("Removing RS232 writer WinUSB driver…", uninstallRS232Driver)
+			},
+		)
+	})
 	refreshButton := newWinUISecondaryButton("Check again", 104, refresh)
 
 	newDriverRow := func(
@@ -1315,6 +1353,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 	setupButtons = []*widget.Button{
 		installWCH, removeWCH.Button,
 		installFTDI, removeFTDI.Button,
+		installRS232, removeRS232.Button,
 		refreshButton.Button,
 	}
 
@@ -1334,6 +1373,12 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 			"Used for DMA Speed Test with FT600/FT601 adapters.",
 			installFTDI,
 			removeFTDI,
+		),
+		newDriverRow(
+			"RS232 writer driver",
+			"Uses WinUSB on FTDI Interface A for FPGA detection and programming with RS232 writer boards.",
+			installRS232,
+			removeRS232,
 		),
 	)
 	go func() {

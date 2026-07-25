@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func inspectSystemComponents(ch347DLL, _ string) []componentStatus {
@@ -60,6 +61,14 @@ func inspectSystemComponents(ch347DLL, _ string) []componentStatus {
 		Name:      "FTDI D3XX driver",
 		Installed: ftdiReady,
 		Details:   ftdiDetails,
+	})
+	rs232Context, cancelRS232 := context.WithTimeout(context.Background(), 15*time.Second)
+	rs232Ready, rs232Details := inspectRS232Driver(rs232Context)
+	cancelRS232()
+	statuses = append(statuses, componentStatus{
+		Name:      "RS232 writer driver",
+		Installed: rs232Ready,
+		Details:   rs232Details,
 	})
 	return statuses
 }
