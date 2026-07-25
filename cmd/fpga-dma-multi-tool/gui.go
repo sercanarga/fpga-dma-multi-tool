@@ -16,10 +16,8 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/storage"
 	fyneTheme "fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -631,8 +629,9 @@ func deviceScanErrorMessage(err error) string {
 }
 
 func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
+	selectedFilePath := ""
 	filePath := widget.NewEntry()
-	filePath.SetPlaceHolder("Select a .bin file")
+	filePath.SetPlaceHolder("Select a .bin or .bit file")
 	mode := widget.NewRadioGroup([]string{"Flash (.bin, persistent)", "SRAM (.bit, temporary)"}, nil)
 	mode.Horizontal = true
 	mode.Required = true
@@ -649,16 +648,8 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	logEntry.Disable()
 
 	openFilePicker := func() {
-		picker := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-			if err != nil {
-				showWinUIError(state.window, err)
-				return
-			}
-			if reader == nil {
-				return
-			}
-			path := reader.URI().Path()
-			_ = reader.Close()
+		showProgrammingFilePicker(state.window, selectedFilePath, func(path string) {
+			selectedFilePath = path
 			filePath.SetText(path)
 			switch strings.ToLower(fileExtension(path)) {
 			case ".bin":
@@ -666,12 +657,10 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 			case ".bit":
 				mode.SetSelected("SRAM (.bit, temporary)")
 			}
-		}, state.window)
-		picker.SetFilter(storage.NewExtensionFileFilter([]string{".bin", ".bit"}))
-		picker.Resize(fyne.NewSize(760, 500))
-		picker.Show()
+		})
 	}
 	chooseButton := newWinUISecondaryButton("Choose file", 104, openFilePicker)
+	fileField := container.NewStack(filePath, newTapTarget(openFilePicker))
 
 	var programButton *widget.Button
 	programButton = widget.NewButton("Program FPGA", func() {
@@ -691,7 +680,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 		}
 		state.resultMu.RUnlock()
 		request := programRequest{
-			FilePath: filePath.Text, Mode: selectedMode,
+			FilePath: selectedFilePath, Mode: selectedMode,
 			Cable:    directCH347ProgrammingCable,
 			FPGAPart: strings.ToLower(part.Value()), ChainIndex: chainIndex,
 		}
@@ -728,7 +717,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	programButton.Importance = widget.HighImportance
 
 	form := widget.NewForm(
-		widget.NewFormItem("File", container.NewBorder(nil, nil, nil, chooseButton.Object, filePath)),
+		widget.NewFormItem("File", container.NewBorder(nil, nil, nil, chooseButton.Object, fileField)),
 		widget.NewFormItem("Target", outlinedSelect(part.Select)),
 		widget.NewFormItem("Mode", mode),
 	)
