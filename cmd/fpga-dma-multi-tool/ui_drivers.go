@@ -132,7 +132,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 		showWinUIConfirm(
 			state.window,
 			"Install RS232 writer driver",
-			"Keep the RS232 writer connected. In Zadig, select only Quad RS232-HS/FT232H Interface 0 (0403:6011 or 0403:6014), choose WinUSB, then click Install/Replace Driver.",
+			"Keep the writer connected. In Zadig, select only FT2232H/FT4232H/FT232H Interface 0 (0403:6010, 6011, or 6014), choose WinUSB, then click Install/Replace Driver.",
 			"Open installer",
 			false,
 			func() {
@@ -145,7 +145,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 		showWinUIConfirm(
 			state.window,
 			"Remove RS232 writer driver",
-			"Remove only the WinUSB packages for FTDI 0403:6011/6014 Interface 0? Other FTDI interfaces and the D3XX driver are not changed.",
+			"Remove only the active WinUSB packages for FTDI 0403:6010/6011/6014 Interface 0? Other FTDI interfaces and the D3XX driver are not changed.",
 			"Remove",
 			true,
 			func() {
@@ -226,7 +226,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 		),
 		newDriverRow(
 			"RS232 writer driver",
-			"Uses WinUSB on FTDI Interface A for FPGA detection and programming with RS232 writer boards.",
+			"Uses WinUSB on supported FTDI and Digilent Interface A devices for FPGA detection and programming.",
 			installRS232,
 			removeRS232,
 		),

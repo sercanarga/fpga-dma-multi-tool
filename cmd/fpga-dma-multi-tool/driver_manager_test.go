@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestDriverINFMatchesOriginalPackageName(t *testing.T) {
 	tests := []struct {
@@ -80,12 +84,14 @@ func TestRS232DriverINFMatchesOnlySupportedWinUSBInterfaces(t *testing.T) {
 		contents string
 		want     bool
 	}{
+		{"dual writer", `DeviceID="USB\VID_0403&PID_6010&MI_00" Service=WinUSB`, true},
 		{"quad writer", `DeviceID="USB\VID_0403&PID_6011&MI_00" Service=WinUSB`, true},
 		{"ft232h writer", `DeviceID="USB\VID_0403&PID_6014" Service=WinUSB`, true},
+		{"wrong dual interface", `DeviceID="USB\VID_0403&PID_6010&MI_01" Service=WinUSB`, false},
 		{"wrong interface", `DeviceID="USB\VID_0403&PID_6011&MI_01" Service=WinUSB`, false},
 		{"wrong ft232h interface", `DeviceID="USB\VID_0403&PID_6014&MI_01" Service=WinUSB`, false},
 		{"manufacturer driver", `DeviceID="USB\VID_0403&PID_6011&MI_00" Service=FTDIBUS`, false},
-		{"unrelated FTDI", `DeviceID="USB\VID_0403&PID_6010&MI_00" Service=WinUSB`, false},
+		{"unrelated FTDI", `DeviceID="USB\VID_0403&PID_6015" Service=WinUSB`, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -96,18 +102,69 @@ func TestRS232DriverINFMatchesOnlySupportedWinUSBInterfaces(t *testing.T) {
 	}
 }
 
-func TestRS232WriterCableMapping(t *testing.T) {
-	tests := map[string]string{"6011": "ft4232", "6014": "ft232", " 6014 ": "ft232"}
-	for pid, want := range tests {
-		got, err := rs232CableForPID(pid)
-		if err != nil {
-			t.Fatalf("rs232CableForPID(%q) error: %v", pid, err)
-		}
-		if got != want {
-			t.Fatalf("rs232CableForPID(%q) = %q, want %q", pid, got, want)
-		}
+func TestRS232CableCandidatesPreferDetectedDigilentProfile(t *testing.T) {
+	tests := []struct {
+		name   string
+		device rs232Device
+		first  string
+	}{
+		{
+			name: "Digilent FT2232H",
+			device: rs232Device{
+				PID: "6010", Name: "Digilent USB Device",
+			},
+			first: "digilent",
+		},
+		{
+			name: "Digilent HS3",
+			device: rs232Device{
+				PID: "6014", Name: "Digilent JTAG-HS3",
+			},
+			first: "digilent_hs3",
+		},
+		{
+			name: "generic FT232H",
+			device: rs232Device{
+				PID: "6014", Name: "FT232H",
+			},
+			first: "ft232",
+		},
 	}
-	if _, err := rs232CableForPID("6010"); err == nil {
-		t.Fatal("unsupported FTDI PID was accepted")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidates, err := rs232CableCandidates(test.device)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(candidates) == 0 || candidates[0] != test.first {
+				t.Fatalf("candidates = %v, want first %q", candidates, test.first)
+			}
+		})
+	}
+}
+
+func TestRS232DeviceArgumentsUseStableSerialOnly(t *testing.T) {
+	withSerial := rs232DeviceArguments(rs232Device{PID: "6010", Serial: "D12345"})
+	if got := strings.Join(withSerial, " "); !strings.Contains(got, "--ftdi-serial D12345") {
+		t.Fatalf("arguments = %v", withSerial)
+	}
+	withoutSerial := rs232DeviceArguments(rs232Device{PID: "6010", Serial: "6&12345&0&0000"})
+	if got := strings.Join(withoutSerial, " "); strings.Contains(got, "--ftdi-serial") {
+		t.Fatalf("location-based instance ID was used as a serial: %v", withoutSerial)
+	}
+}
+
+func TestRS232DriverINFsUseExactReadyDevicePackages(t *testing.T) {
+	devices := []rs232Device{
+		{Service: "WinUSB", DriverINF: `C:\Windows\INF\oem42.inf`},
+		{Service: "libusbK", DriverINF: "OEM7.INF"},
+		{Service: "FTDIBUS", DriverINF: "oem9.inf"},
+		{Service: "WinUSB", DriverINF: "ftdibus.inf"},
+		{Service: "WinUSB", DriverINF: "oem42.inf"},
+	}
+	got := rs232DriverINFs(devices)
+	want := []string{"oem42.inf", "oem7.inf"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rs232DriverINFs() = %v, want %v", got, want)
 	}
 }

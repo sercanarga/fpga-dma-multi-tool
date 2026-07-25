@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func prepareProgrammingTransport(
@@ -98,36 +99,78 @@ func prepareRS232ProgrammingTransport(ctx context.Context) (programTransport, er
 	if len(devices) == 0 {
 		return programTransport{}, errors.New("no supported RS232 writer is connected")
 	}
-	var selected *rs232Device
-	for index := range devices {
-		if rs232ServiceReady(devices[index].Service) {
-			selected = &devices[index]
-			break
+	var ready []rs232Device
+	for _, device := range devices {
+		if rs232ServiceReady(device.Service) {
+			ready = append(ready, device)
 		}
 	}
-	if selected == nil {
+	if len(ready) == 0 {
 		return programTransport{}, errors.New(
 			"RS232 writer Interface 0 needs the WinUSB driver; install it from the Drivers tab",
 		)
 	}
-	cable, err := rs232CableForPID(selected.PID)
+	executable, err := findOpenFPGALoader("")
 	if err != nil {
 		return programTransport{}, err
 	}
-	description := strings.TrimSpace(selected.Name)
+
+	var failures []string
+	for _, device := range ready {
+		candidates, candidateErr := rs232CableCandidates(device)
+		if candidateErr != nil {
+			failures = append(failures, candidateErr.Error())
+			continue
+		}
+		for _, cable := range candidates {
+			transport := rs232TransportForDevice(device, cable)
+			probeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+			args := []string{"--detect", "--cable", transport.Cable}
+			args = append(args, transport.Arguments...)
+			output, probeErr := runOpenFPGALoaderCapture(probeContext, executable, args)
+			cancel()
+			if probeErr == nil {
+				if _, parseErr := parseOpenFPGALoaderChain(output); parseErr == nil {
+					return transport, nil
+				}
+			}
+			failures = append(
+				failures,
+				fmt.Sprintf("%s: %s", cable, rs232ProbeFailure(probeErr, output)),
+			)
+		}
+	}
+	return programTransport{}, fmt.Errorf(
+		"RS232 writer driver is ready, but no JTAG cable profile could read the FPGA (%s)",
+		strings.Join(failures, "; "),
+	)
+}
+
+func rs232TransportForDevice(device rs232Device, cable string) programTransport {
+	description := strings.TrimSpace(device.Name)
 	if description == "" {
-		description = "FTDI RS232 writer"
+		description = "FTDI writer"
 	}
 	return programTransport{
-		Cable: cable,
-		Arguments: []string{
-			"--vid", "0x0403",
-			"--pid", "0x" + selected.PID,
-			"--ftdi-channel", "0",
-		},
+		Cable:     cable,
+		Arguments: rs232DeviceArguments(device),
 		Description: fmt.Sprintf(
-			"%s (%s, 0403:%s, Interface A)",
-			description, selected.Service, selected.PID,
+			"%s (%s, 0403:%s, Interface A, %s)",
+			description, device.Service, device.PID, cable,
 		),
-	}, nil
+	}
+}
+
+func rs232ProbeFailure(probeErr error, output string) string {
+	detail := strings.Join(strings.Fields(strings.TrimSpace(output)), " ")
+	if detail == "" && probeErr != nil {
+		detail = probeErr.Error()
+	}
+	if len(detail) > 240 {
+		detail = detail[:240] + "…"
+	}
+	if detail == "" {
+		return "no JTAG device was reported"
+	}
+	return detail
 }

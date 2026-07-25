@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -11,6 +13,16 @@ type componentStatus struct {
 	Name      string
 	Installed bool
 	Details   string
+}
+
+type rs232Device struct {
+	PID          string
+	Service      string
+	Name         string
+	Manufacturer string
+	DriverINF    string
+	InstanceID   string
+	Serial       string
 }
 
 func setupRequired(statuses []componentStatus) bool {
@@ -45,21 +57,89 @@ func rs232DriverINFMatches(contents []byte) bool {
 	if !strings.Contains(text, "winusb") {
 		return false
 	}
+	ft2232h := strings.Contains(text, `vid_0403&pid_6010&mi_00`)
 	ft232h := strings.Contains(text, `vid_0403&pid_6014`) &&
 		(!strings.Contains(text, `vid_0403&pid_6014&mi_`) ||
 			strings.Contains(text, `vid_0403&pid_6014&mi_00`))
-	return strings.Contains(text, `vid_0403&pid_6011&mi_00`) || ft232h
+	return ft2232h || strings.Contains(text, `vid_0403&pid_6011&mi_00`) || ft232h
 }
 
-func rs232CableForPID(pid string) (string, error) {
-	switch strings.ToUpper(strings.TrimSpace(pid)) {
-	case "6011":
-		return "ft4232", nil
-	case "6014":
-		return "ft232", nil
+func rs232ServiceReady(service string) bool {
+	switch strings.ToLower(strings.TrimSpace(service)) {
+	case "winusb", "libusbk", "libusb0":
+		return true
 	default:
-		return "", fmt.Errorf("unsupported RS232 writer PID %s", pid)
+		return false
 	}
+}
+
+func rs232CableCandidates(device rs232Device) ([]string, error) {
+	description := strings.ToLower(strings.Join(
+		[]string{device.Name, device.Manufacturer},
+		" ",
+	))
+	switch strings.ToUpper(strings.TrimSpace(device.PID)) {
+	case "6010":
+		if strings.Contains(description, "digilent") {
+			return []string{"digilent", "ft2232"}, nil
+		}
+		return []string{"ft2232", "digilent"}, nil
+	case "6011":
+		return []string{"ft4232"}, nil
+	case "6014":
+		switch {
+		case strings.Contains(description, "hs3"):
+			return []string{"digilent_hs3", "digilent_hs2", "ft232", "digilent_ad"}, nil
+		case strings.Contains(description, "hs2"),
+			strings.Contains(description, "smt2"):
+			return []string{"digilent_hs2", "digilent_hs3", "ft232", "digilent_ad"}, nil
+		case strings.Contains(description, "analog discovery"):
+			return []string{"digilent_ad", "digilent_hs2", "digilent_hs3", "ft232"}, nil
+		case strings.Contains(description, "digilent"):
+			return []string{"digilent_hs3", "digilent_hs2", "digilent_ad", "ft232"}, nil
+		default:
+			return []string{"ft232", "digilent_hs3", "digilent_hs2", "digilent_ad"}, nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported FTDI writer PID %s", device.PID)
+	}
+}
+
+func rs232DeviceArguments(device rs232Device) []string {
+	arguments := []string{
+		"--vid", "0x0403",
+		"--pid", "0x" + strings.ToUpper(strings.TrimSpace(device.PID)),
+		"--ftdi-channel", "0",
+	}
+	serial := strings.TrimSpace(device.Serial)
+	if serial != "" && !strings.ContainsAny(serial, `\&`) {
+		arguments = append(arguments, "--ftdi-serial", serial)
+	}
+	return arguments
+}
+
+func rs232DriverINFs(devices []rs232Device) []string {
+	unique := make(map[string]bool)
+	for _, device := range devices {
+		if !rs232ServiceReady(device.Service) {
+			continue
+		}
+		infPath := strings.ReplaceAll(strings.TrimSpace(device.DriverINF), `\`, "/")
+		inf := strings.ToLower(filepath.Base(infPath))
+		if !strings.HasPrefix(inf, "oem") || !strings.HasSuffix(inf, ".inf") {
+			continue
+		}
+		number := strings.TrimSuffix(strings.TrimPrefix(inf, "oem"), ".inf")
+		if _, err := strconv.Atoi(number); err == nil {
+			unique[inf] = true
+		}
+	}
+	infNames := make([]string, 0, len(unique))
+	for inf := range unique {
+		infNames = append(infNames, inf)
+	}
+	sort.Strings(infNames)
+	return infNames
 }
 
 func bundledPath(parts ...string) (string, error) {

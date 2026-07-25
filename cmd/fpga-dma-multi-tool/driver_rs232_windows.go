@@ -12,26 +12,29 @@ import (
 	"strings"
 )
 
-type rs232Device struct {
-	PID        string
-	Service    string
-	Name       string
-	InstanceID string
-}
-
 func detectRS232Devices(ctx context.Context) ([]rs232Device, error) {
 	script := `
 $devices = Get-CimInstance Win32_PnPEntity | Where-Object {
-    $_.PNPDeviceID -match '^USB\\(VID_0403&PID_6011&MI_00|VID_0403&PID_6014(&MI_00)?)\\'
+    $_.PNPDeviceID -match '^USB\\(VID_0403&PID_(6010|6011)&MI_00|VID_0403&PID_6014(&MI_00)?)\\'
 }
 foreach ($device in $devices) {
-    $match = [regex]::Match($device.PNPDeviceID, '(?i)PID_(6011|6014)')
+    $match = [regex]::Match($device.PNPDeviceID, '(?i)PID_(6010|6011|6014)')
     if ($match.Success) {
+        $propertyParameters = @{
+            InstanceId = $device.PNPDeviceID
+            KeyName = 'DEVPKEY_Device_DriverInfPath'
+            ErrorAction = 'SilentlyContinue'
+        }
+        $inf = (Get-PnpDeviceProperty @propertyParameters).Data
+        $serial = ([string]$device.PNPDeviceID -split '\\')[-1]
         @(
             $match.Groups[1].Value.ToUpperInvariant(),
             [string]$device.Service,
             ([string]$device.Name -replace [char]9, " "),
-            [string]$device.PNPDeviceID
+            ([string]$device.Manufacturer -replace [char]9, " "),
+            [IO.Path]::GetFileName([string]$inf),
+            [string]$device.PNPDeviceID,
+            [string]$serial
         ) -join [char]9
     }
 }
@@ -53,27 +56,21 @@ foreach ($device in $devices) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		fields := strings.SplitN(line, "\t", 4)
-		if len(fields) != 4 {
+		fields := strings.SplitN(line, "\t", 7)
+		if len(fields) != 7 {
 			continue
 		}
 		devices = append(devices, rs232Device{
-			PID:        strings.ToUpper(strings.TrimSpace(fields[0])),
-			Service:    strings.TrimSpace(fields[1]),
-			Name:       strings.TrimSpace(fields[2]),
-			InstanceID: strings.TrimSpace(fields[3]),
+			PID:          strings.ToUpper(strings.TrimSpace(fields[0])),
+			Service:      strings.TrimSpace(fields[1]),
+			Name:         strings.TrimSpace(fields[2]),
+			Manufacturer: strings.TrimSpace(fields[3]),
+			DriverINF:    strings.ToLower(strings.TrimSpace(fields[4])),
+			InstanceID:   strings.TrimSpace(fields[5]),
+			Serial:       strings.TrimSpace(fields[6]),
 		})
 	}
 	return devices, nil
-}
-
-func rs232ServiceReady(service string) bool {
-	switch strings.ToLower(strings.TrimSpace(service)) {
-	case "winusb", "libusbk", "libusb0":
-		return true
-	default:
-		return false
-	}
 }
 
 func inspectRS232Driver(ctx context.Context) (bool, string) {
@@ -125,7 +122,7 @@ func installRS232Driver(ctx context.Context) error {
 	}
 	if len(devices) == 0 {
 		return errors.New(
-			"connect the RS232 writer first; supported USB IDs are 0403:6011 Interface 0 and 0403:6014",
+			"connect the FTDI writer first; supported USB IDs are 0403:6010/6011 Interface 0 and 0403:6014",
 		)
 	}
 	for _, device := range devices {
@@ -172,23 +169,32 @@ if ($signature.SignerCertificate.Subject -notmatch '(?i)Akeo Consulting') {
 		}
 	}
 	return errors.New(
-		"WinUSB was not installed for the RS232 writer; in Zadig select Quad RS232-HS/FT232H Interface 0 and choose WinUSB",
+		"WinUSB was not installed for the writer; in Zadig select FT2232H/FT4232H/FT232H Interface 0 and choose WinUSB",
 	)
 }
 
 func uninstallRS232Driver(ctx context.Context) error {
+	devices, err := detectRS232Devices(ctx)
+	if err != nil {
+		return err
+	}
+	infNames := rs232DriverINFs(devices)
+
 	script := `
 $elevatedScript = @'
-$matches = @()
+$matches = @($env:FPGA_DMA_MULTI_TOOL_RS232_INFS -split ';' | Where-Object {
+    $_ -match '(?i)^oem[0-9]+\.inf$'
+})
 Get-ChildItem -LiteralPath "$env:WINDIR\INF" -Filter 'oem*.inf' | ForEach-Object {
     $text = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
     if (
-        $text -match '(?i)(VID_0403&PID_6011&MI_00|VID_0403&PID_6014)' -and
+        $text -match '(?i)(VID_0403&PID_6010&MI_00|VID_0403&PID_6011&MI_00|VID_0403&PID_6014)' -and
         $text -match '(?i)WinUSB'
     ) {
         $matches += $_.Name
     }
 }
+$matches = @($matches | Sort-Object -Unique)
 if ($matches.Count -eq 0) {
     exit 3
 }
@@ -216,12 +222,29 @@ if ($process.ExitCode -notin @(0, 259, 1641, 3010)) {
 		"-Command", script,
 	)
 	configureChildProcess(command)
+	command.Env = append(
+		os.Environ(),
+		"FPGA_DMA_MULTI_TOOL_RS232_INFS="+strings.Join(infNames, ";"),
+	)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
 			"RS232 WinUSB driver removal failed: %w\n%s",
 			err, strings.TrimSpace(string(output)),
 		)
+	}
+	updated, err := detectRS232Devices(ctx)
+	if err != nil {
+		return fmt.Errorf("RS232 driver was removed, but verification failed: %w", err)
+	}
+	for _, device := range updated {
+		if rs232ServiceReady(device.Service) {
+			return fmt.Errorf(
+				"Windows still reports %s on %s; unplug the writer, reconnect it, and try Remove again",
+				device.Service,
+				device.InstanceID,
+			)
+		}
 	}
 	return nil
 }
