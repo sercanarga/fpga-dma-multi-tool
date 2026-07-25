@@ -668,10 +668,10 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 			}
 		}, state.window)
 		picker.SetFilter(storage.NewExtensionFileFilter([]string{".bin", ".bit"}))
+		picker.Resize(fyne.NewSize(760, 500))
 		picker.Show()
 	}
 	chooseButton := newWinUISecondaryButton("Choose file", 104, openFilePicker)
-	fileField := container.NewStack(filePath, newTapTarget(openFilePicker))
 
 	var programButton *widget.Button
 	programButton = widget.NewButton("Program FPGA", func() {
@@ -728,7 +728,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	programButton.Importance = widget.HighImportance
 
 	form := widget.NewForm(
-		widget.NewFormItem("File", container.NewBorder(nil, nil, nil, chooseButton.Object, fileField)),
+		widget.NewFormItem("File", container.NewBorder(nil, nil, nil, chooseButton.Object, filePath)),
 		widget.NewFormItem("Target", outlinedSelect(part.Select)),
 		widget.NewFormItem("Mode", mode),
 	)
