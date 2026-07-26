@@ -78,14 +78,16 @@ func TestProgrammingCableNames(t *testing.T) {
 	}
 }
 
-func TestRS232DriverINFMatchesOnlySupportedWinUSBInterfaces(t *testing.T) {
+func TestRS232DriverINFMatchesOnlySupportedUSBInterfaces(t *testing.T) {
 	tests := []struct {
 		name     string
 		contents string
 		want     bool
 	}{
 		{"dual writer", `DeviceID="USB\VID_0403&PID_6010&MI_00" Service=WinUSB`, true},
+		{"dual writer parent using libusbK", `DeviceID="USB\VID_0403&PID_6010" AddService=libusbK`, true},
 		{"quad writer", `DeviceID="USB\VID_0403&PID_6011&MI_00" Service=WinUSB`, true},
+		{"quad writer parent using libusb0", `DeviceID="USB\VID_0403&PID_6011" Service=libusb0`, true},
 		{"ft232h writer", `DeviceID="USB\VID_0403&PID_6014" Service=WinUSB`, true},
 		{"wrong dual interface", `DeviceID="USB\VID_0403&PID_6010&MI_01" Service=WinUSB`, false},
 		{"wrong interface", `DeviceID="USB\VID_0403&PID_6011&MI_01" Service=WinUSB`, false},
@@ -123,6 +125,13 @@ func TestRS232CableCandidatesPreferDetectedDigilentProfile(t *testing.T) {
 			first: "digilent_hs3",
 		},
 		{
+			name: "RS DMA FT4232H",
+			device: rs232Device{
+				PID: "6011", Name: "Digilent USB Device",
+			},
+			first: "rs_dma",
+		},
+		{
 			name: "generic FT232H",
 			device: rs232Device{
 				PID: "6014", Name: "FT232H",
@@ -151,6 +160,10 @@ func TestRS232DeviceArgumentsUseStableSerialOnly(t *testing.T) {
 	withoutSerial := rs232DeviceArguments(rs232Device{PID: "6010", Serial: "6&12345&0&0000"})
 	if got := strings.Join(withoutSerial, " "); strings.Contains(got, "--ftdi-serial") {
 		t.Fatalf("location-based instance ID was used as a serial: %v", withoutSerial)
+	}
+	customVID := rs232DeviceArguments(rs232Device{VID: "1234", PID: "6011"})
+	if got := strings.Join(customVID, " "); !strings.Contains(got, "--vid 0x1234") {
+		t.Fatalf("detected VID was not used: %v", customVID)
 	}
 }
 

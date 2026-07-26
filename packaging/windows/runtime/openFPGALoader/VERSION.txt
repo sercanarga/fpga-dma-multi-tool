@@ -6,3 +6,7 @@ Features: Xilinx, XVC client, gzip
 Runtime: MinGW libgcc, libstdc++, libwinpthread and zlib linked statically
 Windows adaptations: Winsock2 XVC client with complete-response reads;
 direct-SPI guard for minimal builds
+FTDI runtime: openFPGALoader-ftdi.exe, libusb 1.0.27, libftdi 1.5
+FTDI source patch: packaging/windows/openfpgaloader-ftdi.patch
+FTDI features: Xilinx, FTDI MPSSE, USB scan, SVF, gzip
+RS DMA profile: Interface A, low value 0x98, low direction 0x8B

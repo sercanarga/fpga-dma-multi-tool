@@ -23,9 +23,9 @@ Source: https://github.com/pbatard/libwdi/releases/tag/v1.5.1
 Publisher: Akeo Consulting
 Licenses: GNU GPL version 3 or later (Zadig) and GNU LGPL version 3 or later
 (libwdi). The signed upstream executable, complete corresponding source archive,
-and both license texts are included under drivers/rs232/. It is used to install
-WinUSB only for the supported FTDI RS232 writer Interface 0 device selected by
-the user.
+and both license texts are included under drivers/rs232/. WinUSB is the
+recommended selection for a supported FTDI writer Interface 0; the application
+also recognizes existing libusbK and libusb0 installations.
 
 dma-speedtest-memflow-rs 3.2.0
 ------------------------------
@@ -39,8 +39,33 @@ openFPGALoader 1.1.1
 --------------------
 Source: https://github.com/trabucayre/openFPGALoader/releases/tag/v1.1.1
 License: Apache License 2.0
-The Windows executable is built from the tagged source with Xilinx and XVC
-client support. Its XVC socket layer uses Winsock2. MinGW libgcc, libstdc++,
+The XVC Windows executable is built from the tagged source with Xilinx and XVC
+client support. Its XVC socket layer uses Winsock2. The separate FTDI executable
+uses the reproducible patch at packaging/windows/openfpgaloader-ftdi.patch. That
+patch enables dynamic libusb 1.0.27 and libftdi 1.5 runtimes and adds the RS DMA
+Interface A mapping (data 0x98, direction 0x8B). MinGW libgcc, libstdc++,
 libwinpthread, and zlib are linked statically; their license and runtime
 exception texts are included under openFPGALoader/licenses/. The Artix-7
 JTAG-to-SPI bridge files are included unchanged.
+
+libusb 1.0.27
+-------------
+Source: https://github.com/libusb/libusb/releases/tag/v1.0.27
+License: GNU Lesser General Public License version 2.1 or later
+The complete license text is included as
+openFPGALoader/licenses/LICENSE-libusb-LGPL-2.1.txt.
+
+libftdi 1.5
+-----------
+Source: https://www.intra2net.com/en/developer/libftdi/download.php
+License: GNU Library General Public License version 2 or later
+The complete license text is included as
+openFPGALoader/licenses/LICENSE-libftdi-LGPL-2.0.txt.
+
+libusbK 3.1.0.0
+---------------
+Source: https://github.com/mcuee/libusbk/releases/tag/V3.1.0.0
+License: New BSD License
+The x64 DLL is included so libusb can access a writer already using the libusbK
+device driver. The complete license text is included as
+openFPGALoader/licenses/LICENSE-libusbK-BSD.txt.

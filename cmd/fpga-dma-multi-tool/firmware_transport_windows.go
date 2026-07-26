@@ -110,7 +110,7 @@ func prepareRS232ProgrammingTransport(ctx context.Context) (programTransport, er
 			"RS232 writer Interface 0 needs the WinUSB driver; install it from the Drivers tab",
 		)
 	}
-	executable, err := findOpenFPGALoader("")
+	executable, err := findRS232OpenFPGALoader()
 	if err != nil {
 		return programTransport{}, err
 	}
@@ -124,6 +124,7 @@ func prepareRS232ProgrammingTransport(ctx context.Context) (programTransport, er
 		}
 		for _, cable := range candidates {
 			transport := rs232TransportForDevice(device, cable)
+			transport.Executable = executable
 			probeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 			args := []string{"--detect", "--cable", transport.Cable}
 			args = append(args, transport.Arguments...)
@@ -151,12 +152,20 @@ func rs232TransportForDevice(device rs232Device, cable string) programTransport 
 	if description == "" {
 		description = "FTDI writer"
 	}
+	vid := strings.ToUpper(strings.TrimSpace(device.VID))
+	if vid == "" {
+		vid = "0403"
+	}
+	interfaceName := "Interface A"
+	if strings.EqualFold(strings.TrimSpace(device.Interface), "device") {
+		interfaceName = "device node / Interface A"
+	}
 	return programTransport{
 		Cable:     cable,
 		Arguments: rs232DeviceArguments(device),
 		Description: fmt.Sprintf(
-			"%s (%s, 0403:%s, Interface A, %s)",
-			description, device.Service, device.PID, cable,
+			"%s (%s, %s:%s, %s, %s)",
+			description, device.Service, vid, device.PID, interfaceName, cable,
 		),
 	}
 }

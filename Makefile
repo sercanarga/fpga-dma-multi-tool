@@ -42,12 +42,12 @@ verify-runtime:
 	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
 		grep -Fq "detected %s version %s packet size" || \
 		{ echo "openFPGALoader XVC client marker is missing" >&2; exit 1; }
-	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
-		grep -Fq "ft4232" || \
-		{ echo "openFPGALoader FT4232 support marker is missing" >&2; exit 1; }
-	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader.exe" | \
-		grep -Fq "ft232" || \
-		{ echo "openFPGALoader FT232H support marker is missing" >&2; exit 1; }
+	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader-ftdi.exe" | \
+		grep -Fq "FTDI channel param is for FTDI cables" || \
+		{ echo "openFPGALoader FTDI runtime support is missing" >&2; exit 1; }
+	@strings "$(WINDOWS_RUNTIME)/openFPGALoader/openFPGALoader-ftdi.exe" | \
+		grep -Fq "rs_dma" || \
+		{ echo "openFPGALoader RS DMA cable profile is missing" >&2; exit 1; }
 
 build-windows: verify-runtime
 	@test -x "$(FYNE_CROSS)" || { echo "fyne-cross is required" >&2; exit 1; }

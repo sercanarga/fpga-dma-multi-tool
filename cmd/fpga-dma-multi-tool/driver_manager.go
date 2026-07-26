@@ -16,7 +16,9 @@ type componentStatus struct {
 }
 
 type rs232Device struct {
+	VID          string
 	PID          string
+	Interface    string
 	Service      string
 	Name         string
 	Manufacturer string
@@ -54,14 +56,21 @@ func programmingCableFromName(name string) (string, error) {
 
 func rs232DriverINFMatches(contents []byte) bool {
 	text := strings.ToLower(string(contents))
-	if !strings.Contains(text, "winusb") {
+	if !strings.Contains(text, "winusb") &&
+		!strings.Contains(text, "libusbk") &&
+		!strings.Contains(text, "libusb0") {
 		return false
 	}
-	ft2232h := strings.Contains(text, `vid_0403&pid_6010&mi_00`)
+	ft2232h := strings.Contains(text, `vid_0403&pid_6010`) &&
+		(!strings.Contains(text, `vid_0403&pid_6010&mi_`) ||
+			strings.Contains(text, `vid_0403&pid_6010&mi_00`))
+	ft4232h := strings.Contains(text, `vid_0403&pid_6011`) &&
+		(!strings.Contains(text, `vid_0403&pid_6011&mi_`) ||
+			strings.Contains(text, `vid_0403&pid_6011&mi_00`))
 	ft232h := strings.Contains(text, `vid_0403&pid_6014`) &&
 		(!strings.Contains(text, `vid_0403&pid_6014&mi_`) ||
 			strings.Contains(text, `vid_0403&pid_6014&mi_00`))
-	return ft2232h || strings.Contains(text, `vid_0403&pid_6011&mi_00`) || ft232h
+	return ft2232h || ft4232h || ft232h
 }
 
 func rs232ServiceReady(service string) bool {
@@ -81,24 +90,24 @@ func rs232CableCandidates(device rs232Device) ([]string, error) {
 	switch strings.ToUpper(strings.TrimSpace(device.PID)) {
 	case "6010":
 		if strings.Contains(description, "digilent") {
-			return []string{"digilent", "ft2232"}, nil
+			return []string{"digilent", "rs_dma", "ft2232"}, nil
 		}
-		return []string{"ft2232", "digilent"}, nil
+		return []string{"ft2232", "rs_dma", "digilent"}, nil
 	case "6011":
-		return []string{"ft4232"}, nil
+		return []string{"rs_dma", "ft4232"}, nil
 	case "6014":
 		switch {
 		case strings.Contains(description, "hs3"):
-			return []string{"digilent_hs3", "digilent_hs2", "ft232", "digilent_ad"}, nil
+			return []string{"digilent_hs3", "rs_dma", "digilent_hs2", "ft232", "digilent_ad"}, nil
 		case strings.Contains(description, "hs2"),
 			strings.Contains(description, "smt2"):
-			return []string{"digilent_hs2", "digilent_hs3", "ft232", "digilent_ad"}, nil
+			return []string{"digilent_hs2", "rs_dma", "digilent_hs3", "ft232", "digilent_ad"}, nil
 		case strings.Contains(description, "analog discovery"):
-			return []string{"digilent_ad", "digilent_hs2", "digilent_hs3", "ft232"}, nil
+			return []string{"digilent_ad", "rs_dma", "digilent_hs2", "digilent_hs3", "ft232"}, nil
 		case strings.Contains(description, "digilent"):
-			return []string{"digilent_hs3", "digilent_hs2", "digilent_ad", "ft232"}, nil
+			return []string{"rs_dma", "digilent_hs3", "digilent_hs2", "digilent_ad", "ft232"}, nil
 		default:
-			return []string{"ft232", "digilent_hs3", "digilent_hs2", "digilent_ad"}, nil
+			return []string{"ft232", "rs_dma", "digilent_hs3", "digilent_hs2", "digilent_ad"}, nil
 		}
 	default:
 		return nil, fmt.Errorf("unsupported FTDI writer PID %s", device.PID)
@@ -106,8 +115,12 @@ func rs232CableCandidates(device rs232Device) ([]string, error) {
 }
 
 func rs232DeviceArguments(device rs232Device) []string {
+	vid := strings.ToUpper(strings.TrimSpace(device.VID))
+	if vid == "" {
+		vid = "0403"
+	}
 	arguments := []string{
-		"--vid", "0x0403",
+		"--vid", "0x" + vid,
 		"--pid", "0x" + strings.ToUpper(strings.TrimSpace(device.PID)),
 		"--ftdi-channel", "0",
 	}

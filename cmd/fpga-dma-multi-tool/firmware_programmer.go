@@ -25,6 +25,7 @@ const (
 )
 
 type programTransport struct {
+	Executable  string
 	Cable       string
 	Arguments   []string
 	Description string
@@ -88,6 +89,10 @@ func runProgramming(ctx context.Context, request programRequest, logWriter io.Wr
 	if transport.Close != nil {
 		defer transport.Close()
 	}
+	if strings.TrimSpace(request.OpenFPGALoaderPath) == "" &&
+		strings.TrimSpace(transport.Executable) != "" {
+		executable = transport.Executable
+	}
 	args := []string{
 		"--cable", strings.TrimSpace(transport.Cable),
 		"--fpga-part", strings.TrimSpace(request.FPGAPart),
@@ -129,6 +134,9 @@ func runProgrammerCheck(ctx context.Context, cable string, logWriter io.Writer) 
 	if transport.Close != nil {
 		defer transport.Close()
 	}
+	if strings.TrimSpace(transport.Executable) != "" {
+		executable = transport.Executable
+	}
 	args := []string{"--detect", "--cable", transport.Cable}
 	args = append(args, transport.Arguments...)
 	if transport.Description != "" {
@@ -168,6 +176,21 @@ func findOpenFPGALoader(explicit string) (string, error) {
 	return "", errors.New("the bundled programmer runtime is missing")
 }
 
+func findRS232OpenFPGALoader() (string, error) {
+	executable, err := bundledPath(
+		"openFPGALoader", "openFPGALoader-ftdi.exe",
+	)
+	if err != nil {
+		return "", errors.New("the bundled FTDI programmer runtime is missing")
+	}
+	for _, name := range []string{"libftdi1.dll", "libusb-1.0.dll", "libusbK.dll"} {
+		if _, err := bundledPath("openFPGALoader", name); err != nil {
+			return "", fmt.Errorf("the bundled FTDI programmer runtime is missing %s", name)
+		}
+	}
+	return executable, nil
+}
+
 func openFPGALoaderRuntimeComplete(executable string) bool {
 	if executable == "" {
 		return false
@@ -175,7 +198,11 @@ func openFPGALoaderRuntimeComplete(executable string) bool {
 	directory := filepath.Dir(executable)
 	required := []string{
 		"openFPGALoader.exe",
+		"openFPGALoader-ftdi.exe",
 		"cygpath.exe",
+		"libftdi1.dll",
+		"libusb-1.0.dll",
+		"libusbK.dll",
 	}
 	for _, name := range required {
 		if info, err := os.Stat(filepath.Join(directory, name)); err != nil || info.IsDir() {
@@ -211,7 +238,9 @@ func openFPGALoaderSupportsXVC(executable string) bool {
 }
 
 func bundledOpenFPGALoaderDataDirectory(executable string) string {
-	if filepath.Base(executable) != "openFPGALoader.exe" {
+	switch strings.ToLower(filepath.Base(executable)) {
+	case "openfpgaloader.exe", "openfpgaloader-ftdi.exe":
+	default:
 		return ""
 	}
 	directory := filepath.Join(filepath.Dir(executable), "data")

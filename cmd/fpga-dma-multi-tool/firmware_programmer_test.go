@@ -80,23 +80,28 @@ func TestBundledOpenFPGALoaderEnvironmentSupportsSpaces(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(directory, "data"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	executable := filepath.Join(directory, "openFPGALoader.exe")
-	if err := os.WriteFile(executable, []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	environment := openFPGALoaderEnvironment(executable)
-	values := make(map[string]string)
-	for _, entry := range environment {
-		if separator := strings.IndexByte(entry, '='); separator >= 0 {
-			values[strings.ToUpper(entry[:separator])] = entry[separator+1:]
+	for _, executableName := range []string{
+		"openFPGALoader.exe",
+		"openFPGALoader-ftdi.exe",
+	} {
+		executable := filepath.Join(directory, executableName)
+		if err := os.WriteFile(executable, []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
 		}
-	}
-	if got := values["OPENFPGALOADER_SOJ_DIR"]; got != filepath.Join(directory, "data") {
-		t.Fatalf("OPENFPGALOADER_SOJ_DIR = %q", got)
-	}
-	pathValue := values["PATH"]
-	if !strings.HasPrefix(pathValue, directory+string(os.PathListSeparator)) {
-		t.Fatalf("PATH does not start with bundled directory: %q", pathValue)
+		environment := openFPGALoaderEnvironment(executable)
+		values := make(map[string]string)
+		for _, entry := range environment {
+			if separator := strings.IndexByte(entry, '='); separator >= 0 {
+				values[strings.ToUpper(entry[:separator])] = entry[separator+1:]
+			}
+		}
+		if got := values["OPENFPGALOADER_SOJ_DIR"]; got != filepath.Join(directory, "data") {
+			t.Fatalf("%s OPENFPGALOADER_SOJ_DIR = %q", executableName, got)
+		}
+		pathValue := values["PATH"]
+		if !strings.HasPrefix(pathValue, directory+string(os.PathListSeparator)) {
+			t.Fatalf("%s PATH does not start with bundled directory: %q", executableName, pathValue)
+		}
 	}
 }
 
@@ -104,11 +109,13 @@ func TestOpenFPGALoaderRuntimeCompleteRequiresEveryBridge(t *testing.T) {
 	directory := t.TempDir()
 	required := []string{
 		"openFPGALoader.exe",
+		"openFPGALoader-ftdi.exe",
 		"cygpath.exe",
 		"libftdi1.dll",
 		"libgcc_s_seh-1.dll",
 		"libstdc++-6.dll",
 		"libusb-1.0.dll",
+		"libusbK.dll",
 		"libwinpthread-1.dll",
 		"zlib1.dll",
 	}

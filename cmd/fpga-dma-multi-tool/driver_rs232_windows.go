@@ -14,22 +14,51 @@ import (
 
 func detectRS232Devices(ctx context.Context) ([]rs232Device, error) {
 	script := `
+$devicePattern = [regex]::new(
+    '^USB\\VID_(0403)&PID_(6010|6011|6014)(?:&MI_(00))?\\',
+    [Text.RegularExpressions.RegexOptions]::IgnoreCase
+)
+$signedDrivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue)
 $devices = Get-CimInstance Win32_PnPEntity | Where-Object {
-    $_.PNPDeviceID -match '^USB\\(VID_0403&PID_(6010|6011)&MI_00|VID_0403&PID_6014(&MI_00)?)\\'
+    $devicePattern.IsMatch([string]$_.PNPDeviceID)
 }
 foreach ($device in $devices) {
-    $match = [regex]::Match($device.PNPDeviceID, '(?i)PID_(6010|6011|6014)')
-    if ($match.Success) {
-        $propertyParameters = @{
-            InstanceId = $device.PNPDeviceID
-            KeyName = 'DEVPKEY_Device_DriverInfPath'
-            ErrorAction = 'SilentlyContinue'
+    $identity = $devicePattern.Match([string]$device.PNPDeviceID)
+    if ($identity.Success) {
+        function Get-DevicePropertyValue([string]$keyName) {
+            $parameters = @{
+                InstanceId = $device.PNPDeviceID
+                KeyName = $keyName
+                ErrorAction = 'SilentlyContinue'
+            }
+            return (Get-PnpDeviceProperty @parameters).Data
         }
-        $inf = (Get-PnpDeviceProperty @propertyParameters).Data
+        $service = [string](Get-DevicePropertyValue 'DEVPKEY_Device_Service')
+        if ([string]::IsNullOrWhiteSpace($service)) {
+            $service = [string]$device.Service
+        }
+        $inf = [string](Get-DevicePropertyValue 'DEVPKEY_Device_DriverInfPath')
+        if ([string]::IsNullOrWhiteSpace($inf)) {
+            $signed = $signedDrivers | Where-Object {
+                [string]::Equals(
+                    [string]$_.DeviceID,
+                    [string]$device.PNPDeviceID,
+                    [StringComparison]::OrdinalIgnoreCase
+                )
+            } | Select-Object -First 1
+            $inf = [string]$signed.InfName
+        }
         $serial = ([string]$device.PNPDeviceID -split '\\')[-1]
+        $interface = if ($identity.Groups[3].Success) {
+            $identity.Groups[3].Value.ToUpperInvariant()
+        } else {
+            "device"
+        }
         @(
-            $match.Groups[1].Value.ToUpperInvariant(),
-            [string]$device.Service,
+            $identity.Groups[1].Value.ToUpperInvariant(),
+            $identity.Groups[2].Value.ToUpperInvariant(),
+            $interface,
+            $service,
             ([string]$device.Name -replace [char]9, " "),
             ([string]$device.Manufacturer -replace [char]9, " "),
             [IO.Path]::GetFileName([string]$inf),
@@ -56,18 +85,20 @@ foreach ($device in $devices) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		fields := strings.SplitN(line, "\t", 7)
-		if len(fields) != 7 {
+		fields := strings.SplitN(line, "\t", 9)
+		if len(fields) != 9 {
 			continue
 		}
 		devices = append(devices, rs232Device{
-			PID:          strings.ToUpper(strings.TrimSpace(fields[0])),
-			Service:      strings.TrimSpace(fields[1]),
-			Name:         strings.TrimSpace(fields[2]),
-			Manufacturer: strings.TrimSpace(fields[3]),
-			DriverINF:    strings.ToLower(strings.TrimSpace(fields[4])),
-			InstanceID:   strings.TrimSpace(fields[5]),
-			Serial:       strings.TrimSpace(fields[6]),
+			VID:          strings.ToUpper(strings.TrimSpace(fields[0])),
+			PID:          strings.ToUpper(strings.TrimSpace(fields[1])),
+			Interface:    strings.TrimSpace(fields[2]),
+			Service:      strings.TrimSpace(fields[3]),
+			Name:         strings.TrimSpace(fields[4]),
+			Manufacturer: strings.TrimSpace(fields[5]),
+			DriverINF:    strings.ToLower(strings.TrimSpace(fields[6])),
+			InstanceID:   strings.TrimSpace(fields[7]),
+			Serial:       strings.TrimSpace(fields[8]),
 		})
 	}
 	return devices, nil
@@ -83,8 +114,8 @@ func inspectRS232Driver(ctx context.Context) (bool, string) {
 					name = "FTDI RS232 writer"
 				}
 				return true, fmt.Sprintf(
-					"Driver and writer are ready: %s (0403:%s, Interface A).",
-					name, device.PID,
+					"Driver and writer are ready: %s (%s:%s, Interface A, %s).",
+					name, device.VID, device.PID, device.Service,
 				)
 			}
 		}
@@ -122,7 +153,7 @@ func installRS232Driver(ctx context.Context) error {
 	}
 	if len(devices) == 0 {
 		return errors.New(
-			"connect the FTDI writer first; supported USB IDs are 0403:6010/6011 Interface 0 and 0403:6014",
+			"connect the FTDI writer first; supported USB IDs are 0403:6010/6011/6014 on Interface 0 or the device node",
 		)
 	}
 	for _, device := range devices {
@@ -182,24 +213,27 @@ func uninstallRS232Driver(ctx context.Context) error {
 
 	script := `
 $elevatedScript = @'
-$matches = @($env:FPGA_DMA_MULTI_TOOL_RS232_INFS -split ';' | Where-Object {
+$candidateInfs = @($env:FPGA_DMA_MULTI_TOOL_RS232_INFS -split ';' | Where-Object {
     $_ -match '(?i)^oem[0-9]+\.inf$'
 })
 Get-ChildItem -LiteralPath "$env:WINDIR\INF" -Filter 'oem*.inf' | ForEach-Object {
     $text = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
     if (
-        $text -match '(?i)(VID_0403&PID_6010&MI_00|VID_0403&PID_6011&MI_00|VID_0403&PID_6014)' -and
-        $text -match '(?i)WinUSB'
+        [regex]::IsMatch(
+            $text,
+            '(?i)(VID_0403&PID_6010(?:(?:&MI_00)|(?!&MI_))|VID_0403&PID_6011(?:(?:&MI_00)|(?!&MI_))|VID_0403&PID_6014(?:(?:&MI_00)|(?!&MI_)))'
+        ) -and
+        [regex]::IsMatch($text, '(?i)(WinUSB|libusbK|libusb0)')
     ) {
-        $matches += $_.Name
+        $candidateInfs += $_.Name
     }
 }
-$matches = @($matches | Sort-Object -Unique)
-if ($matches.Count -eq 0) {
+$candidateInfs = @($candidateInfs | Sort-Object -Unique)
+if ($candidateInfs.Count -eq 0) {
     exit 3
 }
-foreach ($inf in $matches) {
-    & pnputil.exe /delete-driver $inf /uninstall
+foreach ($inf in $candidateInfs) {
+    & pnputil.exe /delete-driver $inf /uninstall /force
     if ($LASTEXITCODE -notin @(0, 259, 1641, 3010)) {
         exit $LASTEXITCODE
     }

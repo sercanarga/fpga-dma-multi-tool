@@ -12,7 +12,7 @@ import (
 )
 
 func scanRS232(ctx context.Context, opts options, diagnostics io.Writer) ([]deviceResult, error) {
-	executable, err := findOpenFPGALoader("")
+	executable, err := findRS232OpenFPGALoader()
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,90 @@
+diff --git a/cmake/Modules/CrossCompileWindows.cmake b/cmake/Modules/CrossCompileWindows.cmake
+index ef07483..58d9ee4 100644
+--- a/cmake/Modules/CrossCompileWindows.cmake
++++ b/cmake/Modules/CrossCompileWindows.cmake
+@@ -61,8 +61,10 @@ function(setup_libusb_windows)
+     file(MAKE_DIRECTORY "${CROSS_DEPS_INSTALL_DIR}/include/libusb-1.0")
+     file(COPY "${LIBUSB_EXTRACT_DIR}/include/libusb.h"
+          DESTINATION "${CROSS_DEPS_INSTALL_DIR}/include/libusb-1.0/")
+-    file(COPY "${LIBUSB_EXTRACT_DIR}/MinGW64/static/libusb-1.0.a"
++    file(COPY "${LIBUSB_EXTRACT_DIR}/MinGW64/static/libusb-1.0.dll.a"
+          DESTINATION "${CROSS_DEPS_INSTALL_DIR}/lib/")
++    file(COPY "${LIBUSB_EXTRACT_DIR}/MinGW64/dll/libusb-1.0.dll"
++         DESTINATION "${CROSS_DEPS_INSTALL_DIR}/bin/")
+ 
+     file(WRITE "${CROSS_DEPS_INSTALL_DIR}/lib/pkgconfig/libusb-1.0.pc"
+ "prefix=${CROSS_DEPS_INSTALL_DIR}
+@@ -79,7 +81,7 @@ Cflags: -I\${includedir}
+ 
+     set(LIBUSB_FOUND TRUE PARENT_SCOPE)
+     set(LIBUSB_INCLUDE_DIRS "${CROSS_DEPS_INSTALL_DIR}/include/libusb-1.0" PARENT_SCOPE)
+-    set(LIBUSB_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.a" PARENT_SCOPE)
++    set(LIBUSB_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.dll.a" PARENT_SCOPE)
+     set(LIBUSB_VERSION ${LIBUSB_VERSION} PARENT_SCOPE)
+ endfunction()
+ 
+@@ -109,7 +111,7 @@ function(setup_libftdi_windows)
+         endif()
+     endif()
+ 
+-    if(NOT EXISTS "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.a")
++    if(NOT EXISTS "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.dll.a")
+         message(STATUS "Building libftdi for Windows...")
+         file(MAKE_DIRECTORY ${LIBFTDI_BUILD_DIR})
+ 
+@@ -121,7 +123,7 @@ function(setup_libftdi_windows)
+             -DCMAKE_INSTALL_PREFIX=${CROSS_DEPS_INSTALL_DIR}
+             -DCMAKE_PREFIX_PATH=${CROSS_DEPS_INSTALL_DIR}
+             -DLIBUSB_INCLUDE_DIRS=${CROSS_DEPS_INSTALL_DIR}/include/libusb-1.0
+-            -DLIBUSB_LIBRARIES=${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.a
++            -DLIBUSB_LIBRARIES=${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.dll.a
+             -DFTDIPP=OFF -DBUILD_TESTS=OFF -DDOCUMENTATION=OFF
+             -DEXAMPLES=OFF -DFTDI_EEPROM=OFF -DPYTHON_BINDINGS=OFF
+             -DSTATICLIBS=ON
+@@ -192,7 +194,7 @@ Cflags: -I\${includedir}
+ 
+     set(LIBFTDI_FOUND TRUE PARENT_SCOPE)
+     set(LIBFTDI_INCLUDE_DIRS "${CROSS_DEPS_INSTALL_DIR}/include/libftdi1" PARENT_SCOPE)
+-    set(LIBFTDI_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.a" PARENT_SCOPE)
++    set(LIBFTDI_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.dll.a" PARENT_SCOPE)
+     set(LIBFTDI_VERSION ${LIBFTDI_VERSION} PARENT_SCOPE)
+ endfunction()
+ 
+@@ -210,11 +212,11 @@ function(setup_windows_cross_compile_deps)
+ 
+     set(LIBUSB_FOUND TRUE PARENT_SCOPE)
+     set(LIBUSB_INCLUDE_DIRS "${CROSS_DEPS_INSTALL_DIR}/include/libusb-1.0" PARENT_SCOPE)
+-    set(LIBUSB_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.a" PARENT_SCOPE)
++    set(LIBUSB_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libusb-1.0.dll.a" PARENT_SCOPE)
+ 
+     set(LIBFTDI_FOUND TRUE PARENT_SCOPE)
+     set(LIBFTDI_INCLUDE_DIRS "${CROSS_DEPS_INSTALL_DIR}/include/libftdi1" PARENT_SCOPE)
+-    set(LIBFTDI_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.a" PARENT_SCOPE)
++    set(LIBFTDI_LIBRARIES "${CROSS_DEPS_INSTALL_DIR}/lib/libftdi1.dll.a" PARENT_SCOPE)
+ 
+     set(CROSS_DEPS_INSTALL_DIR ${CROSS_DEPS_INSTALL_DIR} PARENT_SCOPE)
+ 
+diff --git a/cmake/Toolchain-x86_64-w64-mingw32.cmake b/cmake/Toolchain-x86_64-w64-mingw32.cmake
+index ded4d38..08015a2 100644
+--- a/cmake/Toolchain-x86_64-w64-mingw32.cmake
++++ b/cmake/Toolchain-x86_64-w64-mingw32.cmake
+@@ -30,11 +30,11 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+ 
+-set(CMAKE_EXE_LINKER_FLAGS_INIT "-static -static-libgcc -static-libstdc++")
++set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++")
+ 
+ set(ENABLE_UDEV OFF CACHE BOOL "" FORCE)
+ set(ENABLE_LIBGPIOD OFF CACHE BOOL "" FORCE)
+ set(ENABLE_REMOTEBITBANG OFF CACHE BOOL "" FORCE)
+ set(ENABLE_XILINX_VIRTUAL_CABLE_CLIENT OFF CACHE BOOL "" FORCE)
+ set(ENABLE_XILINX_VIRTUAL_CABLE_SERVER OFF CACHE BOOL "" FORCE)
+-set(BUILD_STATIC ON CACHE BOOL "" FORCE)
++set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
+diff --git a/src/cable.hpp b/src/cable.hpp
+index a0bae56..07a447d 100644
+--- a/src/cable.hpp
++++ b/src/cable.hpp
+@@ -104,0 +105 @@ static std::map <std::string, cable_t> cable_list = {
++	{"rs_dma",             FTDI_SER(0x0403, 0x6014, FTDI_INTF_A, 0x98, 0x8B, 0x00, 0x00)},

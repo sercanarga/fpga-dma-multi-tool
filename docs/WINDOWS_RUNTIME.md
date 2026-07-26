@@ -9,8 +9,9 @@ because the application and external tools load them at runtime.
 - `drivers/wch` contains the signed CH347 driver and vendor DLLs.
 - `drivers/ftdi` contains the signed FTDI D3XX package for FT600/FT601.
 - `drivers/rs232` contains Zadig/libwdi, its configuration, licenses, and source.
-- `openFPGALoader` contains the programmer executable, bridge bitstreams, hashes,
-  and third-party licenses.
+- `openFPGALoader` contains the XVC executable, the separate FTDI/libusb
+  executable with the RS DMA cable profile, their DLLs, bridge bitstreams,
+  hashes, and third-party licenses.
 - Root DLLs and the DMA benchmark executable are runtime dependencies.
 
 Do not normalize the capitalization or filenames inside signed vendor driver
@@ -24,7 +25,7 @@ Run:
 make verify-runtime
 ```
 
-The target verifies pinned SHA-256 hashes and required openFPGALoader transport
+The target verifies pinned SHA-256 hashes and real XVC, FTDI, and RS DMA feature
 markers. `make build-windows` runs this check automatically before packaging.
 
 Third-party provenance and redistribution notes are recorded in

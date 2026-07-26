@@ -36,8 +36,12 @@ The Flash tab produces a validated firmware request and selects a writer:
 1. `Auto` attempts CH347 first.
 2. If CH347 is unavailable, it attempts a supported RS232 writer.
 3. CH347 runs through the local XVC bridge.
-4. RS232 uses FTDI Interface A through openFPGALoader.
+4. RS232 uses FTDI Interface A through the FTDI-enabled openFPGALoader runtime.
+5. RS DMA writers try the `0x98/0x8B` MPSSE layout used by the public RS DMA
+   tools before falling back to standard Digilent/FTDI layouts.
 
 The Drivers tab owns driver detection and setup. It does not silently replace a
 generic FTDI device: RS232 setup is limited to the documented writer USB IDs and
-the user confirms the exact device in Zadig.
+the user confirms the exact device in Zadig. Detection and removal support
+WinUSB, libusbK, and libusb0 packages bound to Interface 0 or to the composite
+device node.
