@@ -18,6 +18,7 @@ A compact Windows utility for detecting, configuring, and testing supported Arti
 - Load bitstreams into SRAM or write persistent flash
 - Measure memory read and read/write performance
 - Review and remove disconnected Windows Plug and Play entries across all device classes
+- Review VT-x/AMD-V, VT-d/AMD-Vi, Secure Boot, Core Isolation, and negotiated PCIe link widths
 - Install and remove the bundled CH347, FTDI D3XX, and RS232 writer drivers
 - Program through CH347 or supported FTDI/Digilent writers (0403:6010/6011/6014 Interface A)
 

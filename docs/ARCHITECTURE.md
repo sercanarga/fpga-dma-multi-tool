@@ -17,8 +17,10 @@ layer.
 - `file_browser.go` contains filesystem/path logic without UI dependencies.
 - `ui_app.go` creates the application and tabs.
 - `ui_components.go` contains shared Windows-style controls and dialogs.
-- `ui_devices.go`, `ui_flash.go`, `ui_speed.go`, `ui_history.go`, and
-  `ui_drivers.go` each own one application tab.
+- `ui_devices.go`, `ui_flash.go`, `ui_speed.go`, `ui_history.go`,
+  `ui_system_info.go`, and `ui_drivers.go` each own one application tab.
+- `system_info_*` reads processor virtualization, Device Guard, Secure Boot,
+  and per-device PCIe link-width state from Windows.
 - `ui_file_browser.go` renders the custom Explorer-style firmware browser.
 - `ui_theme.go` and `ui_font_*` contain the Windows visual theme.
 
@@ -45,3 +47,8 @@ generic FTDI device: RS232 setup is limited to the documented writer USB IDs and
 the user confirms the exact device in Zadig. Detection and removal support
 WinUSB, libusbK, and libusb0 packages bound to Interface 0 or to the composite
 device node.
+
+The System Info tab reports firmware-enabled CPU virtualization, Windows
+DMA-remapping and Memory Integrity state, UEFI Secure Boot, and negotiated PCIe
+link widths. PCIe rows are omitted when a device or its PnP driver does not
+publish the standard link-width properties.

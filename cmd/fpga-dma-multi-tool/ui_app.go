@@ -40,11 +40,12 @@ func launchGUI() {
 		container.NewTabItem("Flash", state.buildProgrammingTab()),
 		container.NewTabItem("Speed Test", state.buildSpeedTestTab()),
 		container.NewTabItem("Device History", state.buildDeviceHistoryTab()),
+		container.NewTabItem("System Info", state.buildSystemInfoTab()),
 		container.NewTabItem("Drivers", state.buildSetupTab()),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 	if setupRequired(inspectSystemComponents("", "")) {
-		tabs.SelectIndex(4)
+		tabs.SelectIndex(5)
 	}
 	window.SetContent(tabs)
 	window.Resize(fyne.NewSize(860, 590))
