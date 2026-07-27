@@ -9,6 +9,7 @@ A compact Windows utility for detecting, configuring, and testing supported Arti
   <img src="assets/screenshots/flash.png" width="49%" alt="FPGA flash and SRAM programming">
   <img src="assets/screenshots/speed-test.png" width="49%" alt="DMA speed test">
   <img src="assets/screenshots/device-history.png" width="49%" alt="Windows device history">
+  <img src="assets/screenshots/system-info.png" width="49%" alt="Windows system information">
   <img src="assets/screenshots/drivers.png" width="49%" alt="Windows driver management">
 </p>
 
