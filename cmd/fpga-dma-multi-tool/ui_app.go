@@ -16,11 +16,6 @@ const (
 	tableRowHeight    float32 = 34
 )
 
-var (
-	statusBarBackground = winUILightPalette.backgroundSecondary
-	statusBarBorder     = winUILightPalette.controlBorder
-)
-
 type guiState struct {
 	window fyne.Window
 

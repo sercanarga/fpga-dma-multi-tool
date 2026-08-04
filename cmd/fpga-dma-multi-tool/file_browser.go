@@ -1,12 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,13 +54,57 @@ func programmingFilePickerItems(directory string) ([]filePickerItem, error) {
 		}
 		items = append(items, item)
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].isDir != items[j].isDir {
-			return items[i].isDir
-		}
-		return strings.ToLower(items[i].name) < strings.ToLower(items[j].name)
-	})
+	sortProgrammingPickerItems(items, 0, true)
 	return items, nil
+}
+
+func sortProgrammingPickerItems(
+	items []filePickerItem,
+	column int,
+	ascending bool,
+) {
+	slices.SortStableFunc(items, func(left, right filePickerItem) int {
+		if left.isParent != right.isParent {
+			if left.isParent {
+				return -1
+			}
+			return 1
+		}
+		if left.isDir != right.isDir {
+			if left.isDir {
+				return -1
+			}
+			return 1
+		}
+
+		result := 0
+		switch column {
+		case 1:
+			result = left.modified.Compare(right.modified)
+		case 2:
+			result = compareFilePickerText(filePickerType(left), filePickerType(right))
+		case 3:
+			result = cmp.Compare(left.size, right.size)
+		default:
+			result = compareFilePickerText(left.name, right.name)
+		}
+		if result == 0 {
+			result = compareFilePickerText(left.name, right.name)
+		}
+		if !ascending {
+			result = -result
+		}
+		return result
+	})
+}
+
+func compareFilePickerText(left, right string) int {
+	leftFolded := strings.ToLower(strings.TrimSpace(left))
+	rightFolded := strings.ToLower(strings.TrimSpace(right))
+	if result := strings.Compare(leftFolded, rightFolded); result != 0 {
+		return result
+	}
+	return strings.Compare(left, right)
 }
 
 func addProgrammingPickerParent(directory string, items []filePickerItem) []filePickerItem {

@@ -26,10 +26,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 	state.programPart = part
 	writerSelector := newWinUISegmentedControl([]string{"Auto", "CH347", "RS232"})
 	status, statusBar := newStatusBar("Ready. Programming starts only after confirmation.")
-	logEntry := widget.NewMultiLineEntry()
-	logEntry.SetPlaceHolder("Progress will appear here.")
-	logEntry.Wrapping = fyne.TextWrapWord
-	logEntry.Disable()
+	logOutput := newReadOnlyOutput("Progress will appear here.")
 
 	openFilePicker := func() {
 		showProgrammingFilePicker(state.window, selectedFilePath, func(path string) {
@@ -89,13 +86,14 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 		)
 		showWinUIConfirm(state.window, "Confirm programming", message, "Program", false, func() {
 			programButton.Disable()
-			logEntry.SetText("")
+			logOutput.SetText("")
 			status.SetText("Programming… Do not disconnect the board.")
-			writer := newSynchronizedWriter(logEntry)
+			writer := newSynchronizedWriter(logOutput)
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 				defer cancel()
 				err := runProgramming(ctx, request, writer)
+				writer.closeAndFlush()
 				fyne.Do(func() {
 					programButton.Enable()
 					if err != nil {
@@ -127,7 +125,7 @@ func (state *guiState) buildProgrammingTab() fyne.CanvasObject {
 		),
 		newSectionTitle("Activity"),
 	)
-	body := container.NewBorder(controls, nil, nil, nil, logEntry)
+	body := container.NewBorder(controls, nil, nil, nil, logOutput.Object)
 	return newPageFrame(
 		"Flash",
 		"Load a bitstream into temporary SRAM or write persistent flash.",

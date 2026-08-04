@@ -16,11 +16,16 @@ layer.
 - `driver_*` detects, installs, and removes Windows driver packages.
 - `file_browser.go` contains filesystem/path logic without UI dependencies.
 - `ui_app.go` creates the application and tabs.
-- `ui_components.go` contains shared Windows-style controls and dialogs.
+- `ui_components.go` contains shared Windows-style controls, dialogs, and
+  coalesced read-only activity output.
+- `ui_table.go` provides the shared sticky, sortable table headers and row
+  sizing used by every tabular screen.
 - `ui_devices.go`, `ui_flash.go`, `ui_speed.go`, `ui_history.go`,
   `ui_system_info.go`, and `ui_drivers.go` each own one application tab.
 - `system_info_*` reads processor virtualization, Device Guard, Secure Boot,
   and per-device PCIe link-width state from Windows.
+- `fpga_details_*` reads and decodes the selected Artix-7 configuration and
+  boot-status registers without programming or probing flash.
 - `ui_file_browser.go` renders the custom Explorer-style firmware browser.
 - `ui_theme.go` and `ui_font_*` contain the Windows visual theme.
 

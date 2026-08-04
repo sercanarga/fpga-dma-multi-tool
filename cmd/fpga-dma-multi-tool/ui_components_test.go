@@ -79,8 +79,8 @@ func TestPageFrameKeepsStatusBarFullWidth(t *testing.T) {
 	defer application.Quit()
 	application.Settings().SetTheme(newWinUITheme())
 
-	body := canvas.NewRectangle(statusBarBackground)
-	statusSurface := canvas.NewRectangle(statusBarBackground)
+	body := canvas.NewRectangle(winUILightPalette.backgroundSecondary)
+	statusSurface := canvas.NewRectangle(winUILightPalette.backgroundSecondary)
 	statusBar := container.New(&fixedHeightLayout{height: 24}, statusSurface)
 	frame := newPageFrame("Title", "Subtitle", body, statusBar)
 	frame.Resize(fyne.NewSize(640, 420))
@@ -194,6 +194,27 @@ func TestTapTargetRunsAction(t *testing.T) {
 	target.Tapped(nil)
 	if !called {
 		t.Fatal("tap target did not run its action")
+	}
+}
+
+func TestReadOnlyOutputIsHighContrastSelectableAndImmutable(t *testing.T) {
+	application := fyneTest.NewApp()
+	defer application.Quit()
+	application.Settings().SetTheme(newWinUITheme())
+
+	output := newReadOnlyOutput("Progress appears here")
+	output.SetText("programming output")
+	if !output.Label.Selectable {
+		t.Fatal("read-only output must allow text selection and copying")
+	}
+	if !output.Label.TextStyle.Monospace {
+		t.Fatal("read-only output should use a monospace font")
+	}
+	if output.Text() != "programming output" {
+		t.Fatalf("output text = %q", output.Text())
+	}
+	if output.Label.Text != "programming output" {
+		t.Fatalf("rendered output = %q", output.Label.Text)
 	}
 }
 

@@ -14,10 +14,7 @@ func (state *guiState) buildSpeedTestTab() fyne.CanvasObject {
 	duration := newWinUIChoice([]string{"3 seconds", "5 seconds", "10 seconds"})
 	duration.SetSelected("5 seconds")
 	status, statusBar := newStatusBar("Ready. Close memory-heavy applications for consistent results.")
-	logEntry := widget.NewMultiLineEntry()
-	logEntry.SetPlaceHolder("Test progress will appear here.")
-	logEntry.Wrapping = fyne.TextWrapWord
-	logEntry.Disable()
+	logOutput := newReadOnlyOutput("Test progress will appear here.")
 
 	var readButton, readWriteButton *widget.Button
 	runTest := func(mode string) {
@@ -30,25 +27,26 @@ func (state *guiState) buildSpeedTestTab() fyne.CanvasObject {
 			readButton.Disable()
 			readWriteButton.Disable()
 			duration.Select.Disable()
-			logEntry.SetText("")
+			logOutput.SetText("")
 			status.SetText("Running the memory transfer test…")
 
-			writer := newSynchronizedWriter(logEntry)
+			writer := newSynchronizedWriter(logOutput)
 			go func() {
 				timeout := time.Duration((seconds*len(request.Sizes)*2)+60) * time.Second
 				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 				report, err := runSpeedTest(ctx, request, writer)
+				writer.closeAndFlush()
 				fyne.Do(func() {
 					readButton.Enable()
 					readWriteButton.Enable()
 					duration.Select.Enable()
 					if err != nil {
-						logEntry.SetText(err.Error())
+						logOutput.SetText(err.Error())
 						status.SetText("Speed test failed: " + err.Error())
 						return
 					}
-					logEntry.SetText(formatSpeedTestReport(report))
+					logOutput.SetText(formatSpeedTestReport(report))
 					status.SetText(fmt.Sprintf("Completed %d measurements.", len(report.Passes)))
 				})
 			}()
@@ -81,7 +79,7 @@ func (state *guiState) buildSpeedTestTab() fyne.CanvasObject {
 		toolbar,
 		newSectionTitle("Output"),
 	)
-	body := container.NewBorder(top, nil, nil, nil, logEntry)
+	body := container.NewBorder(top, nil, nil, nil, logOutput.Object)
 	return newPageFrame(
 		"DMA Speed Test",
 		"Measure transfer speed, operation rate, and average latency.",

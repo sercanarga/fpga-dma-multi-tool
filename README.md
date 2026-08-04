@@ -16,6 +16,7 @@ A compact Windows utility for detecting, configuring, and testing supported Arti
 ## Features
 
 - Detect supported Artix-7 devices and read their IDCODE and factory DNA ID
+- Inspect read-only FPGA configuration, boot-history, and warm-boot registers
 - Load bitstreams into SRAM or write persistent flash
 - Measure memory read and read/write performance
 - Review and remove disconnected Windows Plug and Play entries across all device classes

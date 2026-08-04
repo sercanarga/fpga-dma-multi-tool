@@ -11,6 +11,38 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+func deviceHistoryStateText(entry deviceHistoryEntry) string {
+	if entry.Present {
+		return "Connected"
+	}
+	return "Disconnected"
+}
+
+func deviceHistoryClassText(entry deviceHistoryEntry) string {
+	if class := strings.TrimSpace(entry.Class); class != "" {
+		return class
+	}
+	return "Unknown"
+}
+
+func compareDeviceHistoryTableRows(
+	left, right deviceHistoryEntry,
+	column int,
+) int {
+	switch column {
+	case 1:
+		return compareTableText(deviceHistoryStateText(left), deviceHistoryStateText(right))
+	case 2:
+		return compareTableText(deviceHistoryClassText(left), deviceHistoryClassText(right))
+	case 3:
+		return compareTableText(left.Enumerator, right.Enumerator)
+	case 4:
+		return compareTableText(left.FriendlyName, right.FriendlyName)
+	default:
+		return compareTableText(left.DeviceID, right.DeviceID)
+	}
+}
+
 func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 	status, statusBar := newStatusBar("Scan Windows device history to begin.")
 	summary := widget.NewLabelWithStyle(
@@ -18,12 +50,18 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Bold: true},
 	)
-	selectedDetails := widget.NewLabel("Select a disconnected device-history entry to remove it.")
-	selectedDetails.Wrapping = fyne.TextWrapWord
-	headers := []string{"", "State", "Class", "Source", "Device", "Device ID"}
+	columns := []sortableTableColumn{
+		{Width: 38},
+		{Title: "State", Width: 88, Sortable: true},
+		{Title: "Class", Width: 98, Sortable: true},
+		{Title: "Source", Width: 78, Sortable: true},
+		{Title: "Device", Width: 220, Sortable: true},
+		{Title: "Device ID", Width: 198, Sortable: true},
+	}
 	var allEntries []deviceHistoryEntry
 	var entries []deviceHistoryEntry
 	selectedIDs := make(map[string]bool)
+	sortState := newTableSortState(-1, true)
 	busy := false
 
 	var table *widget.Table
@@ -40,62 +78,39 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 		}
 		if !value {
 			refreshSelectionUI()
+		} else if table != nil {
+			table.Refresh()
 		}
 	}
 
 	table = widget.NewTable(
 		func() (int, int) {
-			return len(entries) + 1, len(headers)
+			return len(entries), len(columns)
 		},
 		func() fyne.CanvasObject {
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
 			check := widget.NewCheck("", nil)
 			check.Hide()
-			return container.NewStack(label, check)
+			return newStandardTableCell(label, check)
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
-			cell := object.(*fyne.Container)
+			cell := standardTableCellContent(object)
 			label := cell.Objects[0].(*widget.Label)
 			check := cell.Objects[1].(*widget.Check)
 			if id.Col == 0 {
 				label.Hide()
 				check.Show()
 				check.OnChanged = nil
-				if id.Row == 0 {
-					selectable := 0
-					selected := 0
-					for _, entry := range entries {
-						if entry.Present {
-							continue
-						}
-						selectable++
-						if selectedIDs[deviceHistoryInstanceID(entry)] {
-							selected++
-						}
-					}
-					check.Enable()
-					check.SetChecked(selectable > 0 && selected == selectable)
-					check.OnChanged = func(checked bool) {
-						for _, entry := range entries {
-							if !entry.Present {
-								selectedIDs[deviceHistoryInstanceID(entry)] = checked
-							}
-						}
-						refreshSelectionUI()
-					}
-					return
-				}
-				index := id.Row - 1
-				if index < 0 || index >= len(entries) {
+				if id.Row < 0 || id.Row >= len(entries) {
 					check.Disable()
 					check.SetChecked(false)
 					return
 				}
-				entry := entries[index]
+				entry := entries[id.Row]
 				instanceID := deviceHistoryInstanceID(entry)
 				check.SetChecked(selectedIDs[instanceID])
-				if entry.Present {
+				if entry.Present || busy {
 					check.Disable()
 					return
 				}
@@ -108,52 +123,58 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 			}
 			check.Hide()
 			label.Show()
-			if id.Row == 0 {
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.SetText(headers[id.Col])
-				return
-			}
-			label.TextStyle = fyne.TextStyle{}
-			index := id.Row - 1
-			if index < 0 || index >= len(entries) {
+			if id.Row < 0 || id.Row >= len(entries) {
 				label.SetText("")
 				return
 			}
-			entry := entries[index]
-			stateText := "Disconnected"
-			if entry.Present {
-				stateText = "Connected"
+			entry := entries[id.Row]
+			switch id.Col {
+			case 1:
+				label.SetText(deviceHistoryStateText(entry))
+			case 2:
+				label.SetText(deviceHistoryClassText(entry))
+			case 3:
+				label.SetText(entry.Enumerator)
+			case 4:
+				label.SetText(entry.FriendlyName)
+			default:
+				label.SetText(entry.DeviceID)
 			}
-			class := entry.Class
-			if strings.TrimSpace(class) == "" {
-				class = "Unknown"
-			}
-			values := []string{
-				"", stateText, class, entry.Enumerator, entry.FriendlyName, entry.DeviceID,
-			}
-			label.SetText(values[id.Col])
 		},
 	)
-	for column, width := range []float32{42, 100, 115, 90, 250, 230} {
-		table.SetColumnWidth(column, width)
+	columns[0].ConfigureHeader = func(header *sortableTableHeader) {
+		selectable := 0
+		selected := 0
+		for _, entry := range entries {
+			if entry.Present {
+				continue
+			}
+			selectable++
+			if selectedIDs[deviceHistoryInstanceID(entry)] {
+				selected++
+			}
+		}
+		header.showCheck(
+			selectable > 0 && selected == selectable,
+			selectable > 0 && !busy,
+			func(checked bool) {
+				for _, entry := range entries {
+					if !entry.Present {
+						selectedIDs[deviceHistoryInstanceID(entry)] = checked
+					}
+				}
+				refreshSelectionUI()
+			},
+		)
 	}
-	table.SetRowHeight(0, tableHeaderHeight)
+	configureSortableTable(table, columns, &sortState, func() {
+		sortTableRows(entries, sortState, compareDeviceHistoryTableRows)
+	})
 	table.OnSelected = func(id widget.TableCellID) {
-		if id.Row == 0 {
-			table.UnselectAll()
+		if id.Row < 0 || id.Row >= len(entries) {
 			return
 		}
-		index := id.Row - 1
-		if index < 0 || index >= len(entries) {
-			return
-		}
-		entry := entries[index]
-		selectedDetails.SetText(fmt.Sprintf(
-			"%s  •  %s  •  %s",
-			entry.FriendlyName,
-			entry.Class,
-			deviceHistoryInstanceID(entry),
-		))
+		entry := entries[id.Row]
 		if entry.Present {
 			status.SetText("Disconnect this device before removing its history.")
 		} else {
@@ -174,12 +195,10 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 		count := len(selectedEntries())
 		if count == 0 {
 			removeButton.Disable()
-			selectedDetails.SetText("Select one or more disconnected entries to remove.")
 		} else {
 			if !busy {
 				removeButton.Enable()
 			}
-			selectedDetails.SetText(fmt.Sprintf("%d disconnected entries selected.", count))
 		}
 		table.Refresh()
 	}
@@ -190,6 +209,7 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 	applyFilter := func() {
 		table.UnselectAll()
 		entries = filterDeviceHistoryEntries(allEntries, showConnected.Checked, search.Text)
+		sortTableRows(entries, sortState, compareDeviceHistoryTableRows)
 		refreshSelectionUI()
 		if len(allEntries) == 0 {
 			summary.SetText("No device-history entries found")
@@ -236,7 +256,6 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 		table.UnselectAll()
 		setBusy(true)
 		summary.SetText("Scanning…")
-		selectedDetails.SetText("Refreshing Windows devices and reading Plug and Play history.")
 		status.SetText("Refreshing devices and scanning history…")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -249,7 +268,6 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 					entries = nil
 					table.Refresh()
 					summary.SetText("Scan failed")
-					selectedDetails.SetText("Windows device history could not be read.")
 					setBusy(false)
 					status.SetText("Device history scan failed.")
 					showWinUIError(state.window, err)
@@ -340,9 +358,8 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 	top := container.NewVBox(
 		container.NewBorder(nil, nil, summary, actions, nil),
 		container.NewBorder(nil, nil, showConnected, nil, search),
-		selectedDetails,
 	)
-	body := container.NewBorder(top, nil, nil, nil, table)
+	body := container.NewBorder(top, nil, nil, nil, newTableViewport(table))
 	return newPageFrame(
 		"Device History",
 		"Review Windows Plug and Play history or remove disconnected entries.",

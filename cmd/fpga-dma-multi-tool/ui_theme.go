@@ -57,6 +57,86 @@ var winUILightPalette = winUIColorPalette{
 	warning:             color.NRGBA{R: 0x9d, G: 0x5d, B: 0x00, A: 0xff},
 }
 
+var winUIDarkPalette = winUIColorPalette{
+	background:          color.NRGBA{R: 0x20, G: 0x20, B: 0x20, A: 0xff},
+	backgroundSecondary: color.NRGBA{R: 0x1c, G: 0x1c, B: 0x1c, A: 0xff},
+	surface:             color.NRGBA{R: 0x2b, G: 0x2b, B: 0x2b, A: 0xff},
+	control:             color.NRGBA{R: 0x32, G: 0x32, B: 0x32, A: 0xff},
+	controlHover:        color.NRGBA{R: 0x3a, G: 0x3a, B: 0x3a, A: 0xff},
+	controlDisabled:     color.NRGBA{R: 0x29, G: 0x29, B: 0x29, A: 0xff},
+	controlBorder:       color.NRGBA{R: 0x45, G: 0x45, B: 0x45, A: 0xff},
+	textPrimary:         color.NRGBA{R: 0xf5, G: 0xf5, B: 0xf5, A: 0xff},
+	textSecondary:       color.NRGBA{R: 0xc7, G: 0xc7, B: 0xc7, A: 0xff},
+	textDisabled:        color.NRGBA{R: 0x7a, G: 0x7a, B: 0x7a, A: 0xff},
+	textOnAccent:        color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff},
+	accent:              color.NRGBA{R: 0x00, G: 0x78, B: 0xd4, A: 0xff},
+	focusOverlay:        color.NRGBA{R: 0x4c, G: 0xc2, B: 0xff, A: 0x55},
+	hoverOverlay:        color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x0a},
+	pressedOverlay:      color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x18},
+	selectionOverlay:    color.NRGBA{R: 0x4c, G: 0xc2, B: 0xff, A: 0x40},
+	selectFocus:         color.NRGBA{R: 0x17, G: 0x4c, B: 0x66, A: 0xff},
+	scrollBar:           color.NRGBA{R: 0xa0, G: 0xa0, B: 0xa0, A: 0xb0},
+	shadow:              color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x66},
+	error:               color.NRGBA{R: 0xff, G: 0x99, B: 0xa4, A: 0xff},
+	success:             color.NRGBA{R: 0x6c, G: 0xcb, B: 0x5f, A: 0xff},
+	warning:             color.NRGBA{R: 0xfc, G: 0xe1, B: 0x00, A: 0xff},
+}
+
+type winUIColorToken uint8
+
+const (
+	winUIColorBackgroundSecondary winUIColorToken = iota
+	winUIColorSurface
+	winUIColorControlBorder
+	winUIColorTextPrimary
+	winUIColorTextSecondary
+	winUIColorTextDisabled
+	winUIColorAccent
+	winUIColorError
+	winUIColorSuccess
+	winUIColorWarning
+)
+
+type winUIAdaptiveColor struct {
+	theme *winUITheme
+	token winUIColorToken
+}
+
+func (adaptive winUIAdaptiveColor) RGBA() (r, g, b, a uint32) {
+	variant := fyneTheme.VariantLight
+	if application := fyne.CurrentApp(); application != nil {
+		variant = application.Settings().ThemeVariant()
+	}
+	return adaptive.theme.palette(variant).tokenColor(adaptive.token).RGBA()
+}
+
+func (palette winUIColorPalette) tokenColor(token winUIColorToken) color.NRGBA {
+	switch token {
+	case winUIColorBackgroundSecondary:
+		return palette.backgroundSecondary
+	case winUIColorSurface:
+		return palette.surface
+	case winUIColorControlBorder:
+		return palette.controlBorder
+	case winUIColorTextPrimary:
+		return palette.textPrimary
+	case winUIColorTextSecondary:
+		return palette.textSecondary
+	case winUIColorTextDisabled:
+		return palette.textDisabled
+	case winUIColorAccent:
+		return palette.accent
+	case winUIColorError:
+		return palette.error
+	case winUIColorSuccess:
+		return palette.success
+	case winUIColorWarning:
+		return palette.warning
+	default:
+		return palette.textPrimary
+	}
+}
+
 type winUITheme struct {
 	base fyne.Theme
 
@@ -67,7 +147,7 @@ type winUITheme struct {
 	monospace  fyne.Resource
 }
 
-func newWinUITheme() fyne.Theme {
+func newWinUITheme() *winUITheme {
 	return &winUITheme{
 		base:       fyneTheme.DefaultTheme(),
 		regular:    loadWinUIFont("segoeui.ttf"),
@@ -78,63 +158,88 @@ func newWinUITheme() fyne.Theme {
 	}
 }
 
-func (theme *winUITheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
+func (theme *winUITheme) palette(variant fyne.ThemeVariant) winUIColorPalette {
+	if variant == fyneTheme.VariantDark {
+		return winUIDarkPalette
+	}
+	return winUILightPalette
+}
+
+func (theme *winUITheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	palette := theme.palette(variant)
 	switch name {
 	case fyneTheme.ColorNameBackground:
-		return winUILightPalette.background
+		return palette.background
 	case fyneTheme.ColorNameButton:
-		return winUILightPalette.control
+		return palette.control
 	case fyneTheme.ColorNameDisabledButton:
-		return winUILightPalette.controlDisabled
+		return palette.controlDisabled
 	case fyneTheme.ColorNameDisabled:
-		return winUILightPalette.textDisabled
+		return palette.textDisabled
 	case fyneTheme.ColorNameError:
-		return winUILightPalette.error
+		return palette.error
 	case fyneTheme.ColorNameFocus:
-		return winUILightPalette.focusOverlay
+		return palette.focusOverlay
 	case fyneTheme.ColorNameForeground:
-		return winUILightPalette.textPrimary
-	case fyneTheme.ColorNameForegroundOnPrimary,
-		fyneTheme.ColorNameForegroundOnError,
+		return palette.textPrimary
+	case fyneTheme.ColorNameForegroundOnPrimary:
+		return palette.textOnAccent
+	case fyneTheme.ColorNameForegroundOnError,
 		fyneTheme.ColorNameForegroundOnSuccess:
-		return winUILightPalette.textOnAccent
+		if variant == fyneTheme.VariantDark {
+			return winUILightPalette.textPrimary
+		}
+		return palette.textOnAccent
 	case fyneTheme.ColorNameForegroundOnWarning:
-		return winUILightPalette.textPrimary
+		if variant == fyneTheme.VariantDark {
+			return winUILightPalette.textPrimary
+		}
+		return palette.textPrimary
 	case fyneTheme.ColorNameHeaderBackground:
-		return winUILightPalette.backgroundSecondary
+		return palette.backgroundSecondary
 	case fyneTheme.ColorNameHover:
-		return winUILightPalette.hoverOverlay
+		return palette.hoverOverlay
 	case fyneTheme.ColorNameHyperlink, fyneTheme.ColorNamePrimary:
-		return winUILightPalette.accent
+		return palette.accent
 	case fyneTheme.ColorNameInputBackground:
-		return winUILightPalette.surface
+		return palette.surface
 	case fyneTheme.ColorNameMenuBackground:
-		return winUILightPalette.surface
+		return palette.surface
 	case fyneTheme.ColorNameOverlayBackground:
-		return winUILightPalette.surface
+		return palette.surface
 	case fyneTheme.ColorNameInputBorder:
-		return winUILightPalette.controlBorder
+		return palette.controlBorder
 	case fyneTheme.ColorNamePlaceHolder:
-		return winUILightPalette.textSecondary
+		return palette.textSecondary
 	case fyneTheme.ColorNamePressed:
-		return winUILightPalette.pressedOverlay
+		return palette.pressedOverlay
 	case fyneTheme.ColorNameScrollBar:
-		return winUILightPalette.scrollBar
+		return palette.scrollBar
 	case fyneTheme.ColorNameScrollBarBackground:
 		return color.Transparent
 	case fyneTheme.ColorNameSelection:
-		return winUILightPalette.selectionOverlay
+		return palette.selectionOverlay
 	case fyneTheme.ColorNameSeparator:
-		return winUILightPalette.controlBorder
+		return palette.controlBorder
 	case fyneTheme.ColorNameShadow:
-		return winUILightPalette.shadow
+		return palette.shadow
 	case fyneTheme.ColorNameSuccess:
-		return winUILightPalette.success
+		return palette.success
 	case fyneTheme.ColorNameWarning:
-		return winUILightPalette.warning
+		return palette.warning
 	default:
-		return theme.base.Color(name, fyneTheme.VariantLight)
+		return theme.base.Color(name, variant)
 	}
+}
+
+func currentWinUIThemeColor(token winUIColorToken) color.Color {
+	application := fyne.CurrentApp()
+	if application != nil {
+		if current, ok := application.Settings().Theme().(*winUITheme); ok {
+			return winUIAdaptiveColor{theme: current, token: token}
+		}
+	}
+	return winUILightPalette.tokenColor(token)
 }
 
 type winUISelectTheme struct {
@@ -145,13 +250,19 @@ func (theme *winUISelectTheme) Color(
 	name fyne.ThemeColorName,
 	variant fyne.ThemeVariant,
 ) color.Color {
+	palette := winUILightPalette
+	if current, ok := theme.base.(*winUITheme); ok {
+		palette = current.palette(variant)
+	} else if variant == fyneTheme.VariantDark {
+		palette = winUIDarkPalette
+	}
 	switch name {
 	case fyneTheme.ColorNameInputBackground:
-		return winUILightPalette.surface
+		return palette.surface
 	case fyneTheme.ColorNameHover:
-		return winUILightPalette.controlHover
+		return palette.controlHover
 	case fyneTheme.ColorNameFocus:
-		return winUILightPalette.selectFocus
+		return palette.selectFocus
 	default:
 		return theme.base.Color(name, variant)
 	}

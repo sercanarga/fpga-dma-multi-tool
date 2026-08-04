@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -57,13 +58,32 @@ func systemInfoRows(snapshot systemInfoSnapshot) []systemInfoTableRow {
 func systemInfoStateColor(state string) color.Color {
 	switch state {
 	case string(systemInfoOn):
-		return winUILightPalette.success
+		return currentWinUIThemeColor(winUIColorSuccess)
 	case string(systemInfoOff):
-		return winUILightPalette.error
+		return currentWinUIThemeColor(winUIColorError)
 	case string(systemInfoUnavailable):
-		return winUILightPalette.textDisabled
+		return currentWinUIThemeColor(winUIColorTextDisabled)
 	default:
-		return winUILightPalette.accent
+		return currentWinUIThemeColor(winUIColorAccent)
+	}
+}
+
+func compareSystemInfoTableRows(
+	left, right systemInfoTableRow,
+	column int,
+) int {
+	switch column {
+	case 0:
+		leftWidth, leftErr := strconv.Atoi(strings.TrimPrefix(strings.ToLower(left.State), "x"))
+		rightWidth, rightErr := strconv.Atoi(strings.TrimPrefix(strings.ToLower(right.State), "x"))
+		if leftErr == nil && rightErr == nil {
+			return compareTableInt(leftWidth, rightWidth)
+		}
+		return compareTableText(left.State, right.State)
+	case 1:
+		return compareTableText(left.Feature, right.Feature)
+	default:
+		return compareTableText(left.Detail, right.Detail)
 	}
 }
 
@@ -79,50 +99,52 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 	)
 	note.Wrapping = fyne.TextWrapWord
 
-	headers := []string{"State", "Feature or device", "Details"}
+	columns := []sortableTableColumn{
+		{Title: "State", Width: 80, Sortable: true},
+		{Title: "Feature or device", Width: 220, Sortable: true},
+		{Title: "Details", Width: 432, Sortable: true},
+	}
 	rows := []systemInfoTableRow{}
+	sortState := newTableSortState(-1, true)
 	table := widget.NewTable(
 		func() (int, int) {
-			return len(rows) + 1, len(headers)
+			return len(rows), len(columns)
 		},
 		func() fyne.CanvasObject {
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
-			stateText := canvas.NewText("", winUILightPalette.textPrimary)
+			stateText := canvas.NewText("", currentWinUIThemeColor(winUIColorTextPrimary))
 			stateText.TextSize = 14
 			stateText.TextStyle = fyne.TextStyle{Bold: true}
-			return container.NewStack(label, stateText)
+			stateCell := container.New(
+				&statusLabelLayout{horizontalPadding: 8, minimumWidth: 16},
+				stateText,
+			)
+			return newStandardTableCell(label, stateCell)
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
-			cell := object.(*fyne.Container)
+			cell := standardTableCellContent(object)
 			label := cell.Objects[0].(*widget.Label)
-			stateText := cell.Objects[1].(*canvas.Text)
-			if id.Row == 0 {
-				stateText.Hide()
-				label.Show()
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.SetText(headers[id.Col])
-				return
-			}
-			index := id.Row - 1
-			if index < 0 || index >= len(rows) {
+			stateCell := cell.Objects[1].(*fyne.Container)
+			stateText := stateCell.Objects[0].(*canvas.Text)
+			if id.Row < 0 || id.Row >= len(rows) {
 				label.SetText("")
+				stateCell.Hide()
 				stateText.Text = ""
 				stateText.Refresh()
 				return
 			}
-			row := rows[index]
+			row := rows[id.Row]
 			if id.Col == 0 {
 				label.Hide()
-				stateText.Show()
+				stateCell.Show()
 				stateText.Text = row.State
 				stateText.Color = systemInfoStateColor(row.State)
 				stateText.Refresh()
 				return
 			}
-			stateText.Hide()
+			stateCell.Hide()
 			label.Show()
-			label.TextStyle = fyne.TextStyle{}
 			if id.Col == 1 {
 				label.SetText(row.Feature)
 			} else {
@@ -130,10 +152,12 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 			}
 		},
 	)
-	for column, width := range []float32{95, 250, 470} {
-		table.SetColumnWidth(column, width)
+	configureSortableTable(table, columns, &sortState, func() {
+		sortTableRows(rows, sortState, compareSystemInfoTableRows)
+	})
+	table.OnSelected = func(widget.TableCellID) {
+		table.UnselectAll()
 	}
-	table.SetRowHeight(0, tableHeaderHeight)
 
 	var refreshRunning atomic.Bool
 	var refreshButton *widget.Button
@@ -164,6 +188,7 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 					return
 				}
 				rows = systemInfoRows(snapshot)
+				sortTableRows(rows, sortState, compareSystemInfoTableRows)
 				table.Refresh()
 				processorName := snapshot.ProcessorName
 				if processorName == "" {
@@ -184,7 +209,7 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 		container.NewBorder(nil, nil, processor, refreshButton, nil),
 		note,
 	)
-	body := container.NewBorder(top, nil, nil, nil, table)
+	body := container.NewBorder(top, nil, nil, nil, newTableViewport(table))
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		fyne.Do(refresh)

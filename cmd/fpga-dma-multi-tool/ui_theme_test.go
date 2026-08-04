@@ -8,15 +8,20 @@ import (
 	fyneTheme "fyne.io/fyne/v2/theme"
 )
 
-func TestWinUIThemeAlwaysUsesLightPalette(t *testing.T) {
+func TestWinUIThemeUsesSelectedPalette(t *testing.T) {
 	current := newWinUITheme()
-	want := winUILightPalette.background
-	for _, variant := range []fyne.ThemeVariant{fyneTheme.VariantLight, fyneTheme.VariantDark} {
+	for _, test := range []struct {
+		variant fyne.ThemeVariant
+		want    color.NRGBA
+	}{
+		{variant: fyneTheme.VariantLight, want: winUILightPalette.background},
+		{variant: fyneTheme.VariantDark, want: winUIDarkPalette.background},
+	} {
 		got := color.NRGBAModel.Convert(
-			current.Color(fyneTheme.ColorNameBackground, variant),
+			current.Color(fyneTheme.ColorNameBackground, test.variant),
 		).(color.NRGBA)
-		if got != want {
-			t.Fatalf("background for variant %d = %#v, want %#v", variant, got, want)
+		if got != test.want {
+			t.Fatalf("background for variant=%d = %#v, want %#v", test.variant, got, test.want)
 		}
 	}
 }
@@ -48,7 +53,7 @@ func TestWinUIThemeUsesExpectedAccentAndGeometry(t *testing.T) {
 	accent := color.NRGBAModel.Convert(
 		current.Color(fyneTheme.ColorNamePrimary, fyneTheme.VariantDark),
 	).(color.NRGBA)
-	if want := (color.NRGBA{R: 0x00, G: 0x67, B: 0xc0, A: 0xff}); accent != want {
+	if want := winUIDarkPalette.accent; accent != want {
 		t.Fatalf("accent = %#v, want %#v", accent, want)
 	}
 	if got := current.Size(fyneTheme.SizeNameInputRadius); got != 4 {
@@ -104,18 +109,43 @@ func TestWinUIThemeControlsRemainVisibleOnWindowBackground(t *testing.T) {
 	}
 }
 
-func TestWinUISelectThemeUsesOpaqueInteractionSurfaces(t *testing.T) {
-	base := newWinUITheme()
-	selectTheme := &winUISelectTheme{base: base}
-	for name, want := range map[fyne.ThemeColorName]color.NRGBA{
-		fyneTheme.ColorNameInputBackground: winUILightPalette.surface,
-		fyneTheme.ColorNameHover:           winUILightPalette.controlHover,
+func TestWinUIDarkThemeUsesReadableStatusForegrounds(t *testing.T) {
+	current := newWinUITheme()
+	want := winUILightPalette.textPrimary
+	for _, name := range []fyne.ThemeColorName{
+		fyneTheme.ColorNameForegroundOnError,
+		fyneTheme.ColorNameForegroundOnSuccess,
+		fyneTheme.ColorNameForegroundOnWarning,
 	} {
 		got := color.NRGBAModel.Convert(
-			selectTheme.Color(name, fyneTheme.VariantLight),
+			current.Color(name, fyneTheme.VariantDark),
 		).(color.NRGBA)
 		if got != want {
 			t.Fatalf("%s = %#v, want %#v", name, got, want)
+		}
+	}
+}
+
+func TestWinUISelectThemeUsesOpaqueInteractionSurfaces(t *testing.T) {
+	base := newWinUITheme()
+	selectTheme := &winUISelectTheme{base: base}
+	for _, test := range []struct {
+		variant fyne.ThemeVariant
+		palette winUIColorPalette
+	}{
+		{variant: fyneTheme.VariantLight, palette: winUILightPalette},
+		{variant: fyneTheme.VariantDark, palette: winUIDarkPalette},
+	} {
+		for name, want := range map[fyne.ThemeColorName]color.NRGBA{
+			fyneTheme.ColorNameInputBackground: test.palette.surface,
+			fyneTheme.ColorNameHover:           test.palette.controlHover,
+		} {
+			got := color.NRGBAModel.Convert(
+				selectTheme.Color(name, test.variant),
+			).(color.NRGBA)
+			if got != want {
+				t.Fatalf("%s for variant=%d = %#v, want %#v", name, test.variant, got, want)
+			}
 		}
 	}
 }

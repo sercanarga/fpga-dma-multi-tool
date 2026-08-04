@@ -113,18 +113,57 @@ func (*filePickerRow) Cursor() desktop.Cursor {
 	return desktop.DefaultCursor
 }
 
-func newFilePickerHeader() fyne.CanvasObject {
-	label := func(text string) *widget.Label {
-		return widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+var filePickerColumnTitles = [...]string{"Name", "Date modified", "Type", "Size"}
+
+type filePickerHeader struct {
+	widget.BaseWidget
+
+	sortState *tableSortState
+	labels    []*widget.Label
+	targets   []*tapTarget
+	content   *fyne.Container
+	onSort    func()
+}
+
+func newFilePickerHeader(
+	sortState *tableSortState,
+	onSort func(),
+) *filePickerHeader {
+	header := &filePickerHeader{sortState: sortState, onSort: onSort}
+	objects := []fyne.CanvasObject{widget.NewIcon(fyneTheme.FileIcon())}
+	for index, title := range filePickerColumnTitles {
+		column := index
+		label := widget.NewLabelWithStyle(
+			title,
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Bold: true},
+		)
+		label.Truncation = fyne.TextTruncateEllipsis
+		header.labels = append(header.labels, label)
+		target := newTapTarget(func() {
+			header.sortState.toggle(column)
+			header.refreshLabels()
+			if header.onSort != nil {
+				header.onSort()
+			}
+		})
+		header.targets = append(header.targets, target)
+		objects = append(objects, container.NewStack(label, target))
 	}
-	return container.New(
-		&filePickerColumnsLayout{},
-		widget.NewIcon(fyneTheme.FileIcon()),
-		label("Name"),
-		label("Date modified"),
-		label("Type"),
-		label("Size"),
-	)
+	header.content = container.New(&filePickerColumnsLayout{}, objects...)
+	header.ExtendBaseWidget(header)
+	header.refreshLabels()
+	return header
+}
+
+func (header *filePickerHeader) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(header.content)
+}
+
+func (header *filePickerHeader) refreshLabels() {
+	for index, title := range filePickerColumnTitles {
+		header.labels[index].SetText(header.sortState.headerText(title, index, true))
+	}
 }
 
 func showProgrammingFilePicker(parent fyne.Window, initialPath string, onSelected func(string)) {
@@ -133,6 +172,7 @@ func showProgrammingFilePicker(parent fyne.Window, initialPath string, onSelecte
 	fileNameEntry := widget.NewEntry()
 	fileNameEntry.SetPlaceHolder("File name")
 	status := widget.NewLabel("")
+	sortState := newTableSortState(-1, true)
 
 	var (
 		items          []filePickerItem
@@ -198,6 +238,7 @@ func showProgrammingFilePicker(parent fyne.Window, initialPath string, onSelecte
 		}
 		cleanDirectory := filepath.Clean(directory)
 		items = addProgrammingPickerParent(cleanDirectory, loaded)
+		sortProgrammingPickerItems(items, sortState.column, sortState.ascending)
 		currentDir = cleanDirectory
 		selectedIndex = -1
 		fileList.UnselectAll()
@@ -351,10 +392,6 @@ func showProgrammingFilePicker(parent fyne.Window, initialPath string, onSelecte
 		goButton,
 		locationEntry,
 	)
-	fileArea := container.NewBorder(newFilePickerHeader(), nil, nil, nil, fileList)
-	mainArea := container.NewHSplit(sidebar, fileArea)
-	mainArea.SetOffset(0.22)
-
 	fileNameRow := container.NewBorder(
 		nil,
 		nil,
@@ -362,6 +399,32 @@ func showProgrammingFilePicker(parent fyne.Window, initialPath string, onSelecte
 		container.NewHBox(cancelButton.Object, openButton),
 		fileNameEntry,
 	)
+	fileHeader := newFilePickerHeader(&sortState, func() {
+		selectedPath := ""
+		if selectedIndex >= 0 && selectedIndex < len(items) {
+			selectedPath = items[selectedIndex].path
+		}
+		sortProgrammingPickerItems(items, sortState.column, sortState.ascending)
+		fileList.UnselectAll()
+		selectedIndex = -1
+		if selectedPath != "" {
+			for index, item := range items {
+				if strings.EqualFold(item.path, selectedPath) {
+					fileList.Select(index)
+					break
+				}
+			}
+		}
+		if selectedIndex < 0 {
+			fileNameEntry.SetText("")
+			openButton.SetText("Open")
+			openButton.Disable()
+		}
+		fileList.Refresh()
+	})
+	fileArea := container.NewBorder(fileHeader, nil, nil, nil, fileList)
+	mainArea := container.NewHSplit(sidebar, fileArea)
+	mainArea.SetOffset(0.22)
 	content := container.NewBorder(
 		addressBar,
 		container.NewVBox(status, fileNameRow),

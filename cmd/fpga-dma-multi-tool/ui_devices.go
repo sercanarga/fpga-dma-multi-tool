@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -13,89 +12,125 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+type deviceTableRow struct {
+	Device    deviceResult
+	Index     int
+	IndexText string
+	FPGA      string
+	IDCode    string
+	DNAID     string
+	Board     string
+}
+
+func deviceTableRows(devices []deviceResult) []deviceTableRow {
+	rows := make([]deviceTableRow, 0, len(devices))
+	for _, device := range devices {
+		board := strings.Join(device.BoardMatches, ", ")
+		if board == "" {
+			board = "Unknown board"
+		}
+		rows = append(rows, deviceTableRow{
+			Device:    device,
+			Index:     device.Index,
+			IndexText: fmt.Sprintf("%d", device.Index),
+			FPGA:      strings.ToUpper(partFamily(device.Part)),
+			IDCode:    device.IDCode,
+			DNAID:     device.FuseDNA,
+			Board:     board,
+		})
+	}
+	return rows
+}
+
+func compareDeviceTableRows(left, right deviceTableRow, column int) int {
+	switch column {
+	case 0:
+		return compareTableInt(left.Index, right.Index)
+	case 1:
+		return compareTableText(left.FPGA, right.FPGA)
+	case 2:
+		return compareTableText(left.IDCode, right.IDCode)
+	case 3:
+		return compareTableText(left.DNAID, right.DNAID)
+	default:
+		return compareTableText(left.Board, right.Board)
+	}
+}
+
 func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 	summary := widget.NewLabelWithStyle("Ready to scan", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	status, statusBar := newStatusBar("Connect the adapter and power the FPGA board.")
-	headers := []string{"#", "FPGA", "IDCODE", "DNA ID", "Board", ""}
+	columns := []sortableTableColumn{
+		{Title: "#", Width: 44, Sortable: true},
+		{Title: "FPGA", Width: 78, Sortable: true},
+		{Title: "IDCODE", Width: 106, Sortable: true},
+		{Title: "DNA ID", Width: 160, Sortable: true},
+		{Title: "Board", Width: 216, Sortable: true},
+		{Width: 116},
+	}
+	rows := []deviceTableRow{}
+	sortState := newTableSortState(-1, true)
 
 	var table *widget.Table
 	table = widget.NewTable(
 		func() (int, int) {
-			state.resultMu.RLock()
-			defer state.resultMu.RUnlock()
-			return len(state.result.Devices) + 1, len(headers)
+			return len(rows), len(columns)
 		},
 		func() fyne.CanvasObject {
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
-			button := newWinUISecondaryButton("Copy", 88, nil)
+			button := newWinUISecondaryButton("Detailed Info", 112, nil)
 			button.Hide()
-			return container.NewStack(label, button.Object)
+			return newStandardTableCell(label, button.Object)
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
-			cell := object.(*fyne.Container)
+			cell := standardTableCellContent(object)
 			label := cell.Objects[0].(*widget.Label)
 			buttonObject := cell.Objects[1]
 			button := winUISecondaryButtonWidget(buttonObject)
-			if id.Row == 0 {
+			if id.Row < 0 || id.Row >= len(rows) {
 				buttonObject.Hide()
 				label.Show()
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.SetText(headers[id.Col])
+				label.SetText("")
 				return
 			}
-			if id.Col == len(headers)-1 {
+			row := rows[id.Row]
+			if id.Col == len(columns)-1 {
 				label.Hide()
 				buttonObject.Show()
-				row := id.Row - 1
 				button.OnTapped = func() {
-					state.resultMu.RLock()
-					defer state.resultMu.RUnlock()
-					if row >= len(state.result.Devices) {
-						return
-					}
-					encoded, err := json.MarshalIndent(state.result.Devices[row], "", "  ")
-					if err != nil {
-						showWinUIError(state.window, err)
-						return
-					}
-					state.window.Clipboard().SetContent(string(encoded))
-					status.SetText("Device details copied.")
+					status.SetText("Opening detailed FPGA information…")
+					state.showFPGADeviceDetails(row.Device)
 				}
 				return
 			}
 			buttonObject.Hide()
 			label.Show()
-			label.TextStyle = fyne.TextStyle{}
-			state.resultMu.RLock()
-			defer state.resultMu.RUnlock()
-			if id.Row-1 >= len(state.result.Devices) {
-				label.SetText("")
-				return
+			switch id.Col {
+			case 0:
+				label.SetText(row.IndexText)
+			case 1:
+				label.SetText(row.FPGA)
+			case 2:
+				label.SetText(row.IDCode)
+			case 3:
+				label.SetText(row.DNAID)
+			default:
+				label.SetText(row.Board)
 			}
-			device := state.result.Devices[id.Row-1]
-			board := strings.Join(device.BoardMatches, ", ")
-			if board == "" {
-				board = "Unknown board"
-			}
-			values := []string{
-				fmt.Sprintf("%d", device.Index),
-				strings.ToUpper(partFamily(device.Part)),
-				device.IDCode,
-				device.FuseDNA,
-				board,
-			}
-			label.SetText(values[id.Col])
 		},
 	)
-	for column, width := range []float32{48, 88, 118, 176, 280, 88} {
-		table.SetColumnWidth(column, width)
+	configureSortableTable(table, columns, &sortState, func() {
+		sortTableRows(rows, sortState, compareDeviceTableRows)
+	})
+	table.OnSelected = func(widget.TableCellID) {
+		table.UnselectAll()
 	}
-	table.SetRowHeight(0, tableHeaderHeight)
 
 	var scanButton *widget.Button
 	scanButton = widget.NewButton("Scan device", func() {
 		scanButton.Disable()
+		rows = nil
 		state.resultMu.Lock()
 		state.result = scanResult{}
 		state.resultMu.Unlock()
@@ -118,9 +153,8 @@ func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 				state.resultMu.Lock()
 				state.result = scanResult{ToolVersion: version, Devices: devices}
 				state.resultMu.Unlock()
-				for row := 1; row <= len(devices); row++ {
-					table.SetRowHeight(row, tableRowHeight)
-				}
+				rows = deviceTableRows(devices)
+				sortTableRows(rows, sortState, compareDeviceTableRows)
 				if state.programPart != nil && len(devices) > 0 {
 					if detected := partFamily(devices[0].Part); detected != "" {
 						state.programPart.SetSelected(strings.ToUpper(detected))
@@ -128,7 +162,7 @@ func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 				}
 				table.Refresh()
 				summary.SetText(deviceScanSummary(devices))
-				status.SetText("Scan complete. Use Copy to copy one device's details.")
+				status.SetText("Scan complete. Use Detailed Info for configuration and boot status.")
 			})
 		}()
 	})
@@ -146,7 +180,7 @@ func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 		nil,
 		nil,
 		nil,
-		table,
+		newTableViewport(table),
 	)
 	return newPageFrame(
 		"FPGA Devices",

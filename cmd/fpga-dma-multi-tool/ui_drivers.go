@@ -49,12 +49,12 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 					if component.Installed {
 						installed++
 						row.stateLabel.Text = "Installed"
-						row.stateLabel.Color = winUILightPalette.textPrimary
+						row.stateLabel.Color = currentWinUIThemeColor(winUIColorTextPrimary)
 						row.installObject.Hide()
 						row.removeButton.Show()
 					} else {
 						row.stateLabel.Text = "Not installed"
-						row.stateLabel.Color = winUILightPalette.error
+						row.stateLabel.Color = currentWinUIThemeColor(winUIColorError)
 						row.removeButton.Hide()
 						row.installObject.Show()
 					}
@@ -161,7 +161,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 		installButton *widget.Button,
 		removeButton *winUISecondaryButton,
 	) fyne.CanvasObject {
-		stateLabel := canvas.NewText("Checking…", winUILightPalette.textSecondary)
+		stateLabel := canvas.NewText("Checking…", currentWinUIThemeColor(winUIColorTextSecondary))
 		stateLabel.TextSize = 14
 		stateLabel.TextStyle = fyne.TextStyle{Bold: true}
 		stateLabelObject := container.New(
@@ -190,7 +190,7 @@ func (state *guiState) buildSetupTab() fyne.CanvasObject {
 			newSectionTitle(name),
 		)
 		cardContent := container.NewVBox(header, stateLabelObject, purposeLabel, detailLabel)
-		background := canvas.NewRectangle(winUILightPalette.surface)
+		background := canvas.NewRectangle(currentWinUIThemeColor(winUIColorSurface))
 		background.CornerRadius = 6
 		return container.NewStack(
 			background,

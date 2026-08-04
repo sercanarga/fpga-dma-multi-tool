@@ -36,7 +36,7 @@ func newSectionTitle(text string) *widget.Label {
 
 func outlinedSelect(selectControl *widget.Select) fyne.CanvasObject {
 	border := canvas.NewRectangle(color.Transparent)
-	border.StrokeColor = winUILightPalette.controlBorder
+	border.StrokeColor = currentWinUIThemeColor(winUIColorControlBorder)
 	border.StrokeWidth = 1
 	border.CornerRadius = 4
 	themedSelect := container.NewThemeOverride(
@@ -187,7 +187,7 @@ func wrapWinUISecondaryButton(
 	minimumWidth float32,
 ) *winUISecondaryButton {
 	border := canvas.NewRectangle(color.Transparent)
-	border.StrokeColor = winUILightPalette.controlBorder
+	border.StrokeColor = currentWinUIThemeColor(winUIColorControlBorder)
 	border.StrokeWidth = 1
 	border.CornerRadius = 4
 	surface := container.NewStack(button, border)
@@ -217,11 +217,11 @@ func showWinUIDialog(
 	title, message string,
 	dialogType winUIDialogType,
 ) {
-	titleColor := winUILightPalette.textPrimary
+	titleColor := currentWinUIThemeColor(winUIColorTextPrimary)
 	if dialogType == winUIDialogWarning {
-		titleColor = winUILightPalette.warning
+		titleColor = currentWinUIThemeColor(winUIColorWarning)
 	} else if dialogType == winUIDialogError {
-		titleColor = winUILightPalette.error
+		titleColor = currentWinUIThemeColor(winUIColorError)
 	}
 	var popup *widget.PopUp
 	closeButton := widget.NewButton("Close", func() { popup.Hide() })
@@ -257,10 +257,10 @@ func showWinUIConfirm(
 		confirmed()
 	})
 	confirmButton.Importance = widget.HighImportance
-	titleColor := winUILightPalette.textPrimary
+	titleColor := currentWinUIThemeColor(winUIColorTextPrimary)
 	if danger {
 		confirmButton.Importance = widget.DangerImportance
-		titleColor = winUILightPalette.warning
+		titleColor = currentWinUIThemeColor(winUIColorWarning)
 	}
 	popup = newWinUICustomPopup(
 		parent,
@@ -300,7 +300,7 @@ func newWinUICustomPopup(
 			actionObject,
 		),
 	)
-	background := canvas.NewRectangle(winUILightPalette.surface)
+	background := canvas.NewRectangle(currentWinUIThemeColor(winUIColorSurface))
 	background.CornerRadius = 8
 	card := container.NewStack(background, content)
 	return widget.NewModalPopUp(
@@ -356,12 +356,12 @@ func (text *statusBarText) SetText(value string) {
 }
 
 func newStatusBar(initial string) (*statusBarText, fyne.CanvasObject) {
-	label := canvas.NewText(initial, winUILightPalette.textPrimary)
+	label := canvas.NewText(initial, currentWinUIThemeColor(winUIColorTextPrimary))
 	label.Alignment = fyne.TextAlignLeading
 	label.TextSize = 12
 	centeredLabel := container.New(&statusLabelLayout{horizontalPadding: 8}, label)
 	target, _ := url.Parse(repositoryURL)
-	linkLabel := canvas.NewText("GitHub", winUILightPalette.accent)
+	linkLabel := canvas.NewText("GitHub", currentWinUIThemeColor(winUIColorAccent))
 	linkLabel.Alignment = fyne.TextAlignTrailing
 	linkLabel.TextSize = 12
 	linkTarget := newTapTarget(func() {
@@ -373,10 +373,10 @@ func newStatusBar(initial string) (*statusBarText, fyne.CanvasObject) {
 		linkLabel,
 	)
 	linkArea := container.NewStack(linkTextArea, linkTarget)
-	background := canvas.NewRectangle(statusBarBackground)
+	background := canvas.NewRectangle(currentWinUIThemeColor(winUIColorBackgroundSecondary))
 	content := container.NewBorder(nil, nil, centeredLabel, linkArea, nil)
 	bar := container.NewStack(background, content)
-	topBorder := canvas.NewRectangle(statusBarBorder)
+	topBorder := canvas.NewRectangle(currentWinUIThemeColor(winUIColorControlBorder))
 	framed := container.NewBorder(
 		container.New(&fixedHeightLayout{height: 1}, topBorder),
 		nil,
@@ -460,27 +460,125 @@ func newPageFrame(
 	)
 }
 
-type synchronizedWriter struct {
-	mutex  sync.Mutex
-	entry  *widget.Entry
-	buffer strings.Builder
+type readOnlyOutput struct {
+	Object *fyne.Container
+	Label  *widget.Label
+
+	placeholder *widget.Label
+	scroll      *container.Scroll
+	value       string
 }
 
-func newSynchronizedWriter(entry *widget.Entry) *synchronizedWriter {
-	return &synchronizedWriter{entry: entry}
+func newReadOnlyOutput(placeholder string) *readOnlyOutput {
+	output := &readOnlyOutput{}
+	output.Label = widget.NewLabel("")
+	output.Label.Selectable = true
+	output.Label.TextStyle = fyne.TextStyle{Monospace: true}
+	output.Label.Wrapping = fyne.TextWrapWord
+	output.Label.Hide()
+	output.placeholder = widget.NewLabel(placeholder)
+	output.placeholder.Importance = widget.LowImportance
+	output.placeholder.TextStyle = fyne.TextStyle{Monospace: true}
+	output.placeholder.Wrapping = fyne.TextWrapWord
+
+	text := container.NewStack(output.Label, output.placeholder)
+	paddedText := container.New(
+		layout.NewCustomPaddedLayout(7, 7, 8, 8),
+		text,
+	)
+	output.scroll = container.NewVScroll(paddedText)
+	background := canvas.NewRectangle(currentWinUIThemeColor(winUIColorSurface))
+	background.CornerRadius = 4
+	border := canvas.NewRectangle(color.Transparent)
+	border.StrokeColor = currentWinUIThemeColor(winUIColorControlBorder)
+	border.StrokeWidth = 1
+	border.CornerRadius = 4
+	output.Object = container.NewStack(background, output.scroll, border)
+	return output
+}
+
+func (output *readOnlyOutput) SetText(value string) {
+	if output.value == value {
+		return
+	}
+	output.value = value
+	output.Label.SetText(value)
+	if value == "" {
+		output.Label.Hide()
+		output.placeholder.Show()
+		output.scroll.ScrollToTop()
+	} else {
+		output.placeholder.Hide()
+		output.Label.Show()
+		output.scroll.Refresh()
+		output.scroll.ScrollToBottom()
+	}
+}
+
+func (output *readOnlyOutput) Text() string {
+	return output.value
+}
+
+type textOutput interface {
+	SetText(string)
+}
+
+type synchronizedWriter struct {
+	mutex        sync.Mutex
+	output       textOutput
+	buffer       strings.Builder
+	updateQueued bool
+	closed       bool
+}
+
+func newSynchronizedWriter(output textOutput) *synchronizedWriter {
+	return &synchronizedWriter{output: output}
 }
 
 func (writer *synchronizedWriter) Write(data []byte) (int, error) {
 	writer.mutex.Lock()
+	if writer.closed {
+		writer.mutex.Unlock()
+		return len(data), nil
+	}
 	_, _ = writer.buffer.Write(data)
+	if writer.updateQueued {
+		writer.mutex.Unlock()
+		return len(data), nil
+	}
+	writer.updateQueued = true
+	writer.mutex.Unlock()
+
+	fyne.Do(writer.flush)
+	return len(data), nil
+}
+
+func (writer *synchronizedWriter) flush() {
+	writer.mutex.Lock()
+	if writer.closed {
+		writer.updateQueued = false
+		writer.mutex.Unlock()
+		return
+	}
+	text := writer.buffer.String()
+	writer.updateQueued = false
+	writer.mutex.Unlock()
+	writer.output.SetText(text)
+}
+
+func (writer *synchronizedWriter) closeAndFlush() {
+	writer.mutex.Lock()
+	if writer.closed {
+		writer.mutex.Unlock()
+		return
+	}
+	writer.closed = true
+	writer.updateQueued = false
 	text := writer.buffer.String()
 	writer.mutex.Unlock()
-	fyne.Do(func() {
-		writer.entry.SetText(text)
-		writer.entry.CursorRow = strings.Count(text, "\n")
-		writer.entry.Refresh()
+	fyne.DoAndWait(func() {
+		writer.output.SetText(text)
 	})
-	return len(data), nil
 }
 
 var _ io.Writer = (*synchronizedWriter)(nil)
