@@ -93,6 +93,15 @@ func TestSortTableRowsIsStableAndReversible(t *testing.T) {
 	}
 }
 
+func TestFillTableColumnWidthUsesRemainingViewportSpace(t *testing.T) {
+	if got := fillTableColumnWidth(820, 348, 384, 3); got != 468 {
+		t.Fatalf("expanded details width = %v, want 468", got)
+	}
+	if got := fillTableColumnWidth(700, 348, 384, 3); got != 384 {
+		t.Fatalf("minimum details width = %v, want 384", got)
+	}
+}
+
 func TestConfigureSortableTableUsesDedicatedHeaderRow(t *testing.T) {
 	application := fyneTest.NewApp()
 	defer application.Quit()
@@ -110,7 +119,9 @@ func TestConfigureSortableTableUsesDedicatedHeaderRow(t *testing.T) {
 	)
 	configureSortableTable(
 		table,
-		[]sortableTableColumn{{Title: "Name", Width: 180, Sortable: true}},
+		[]sortableTableColumn{{
+			Title: "Name", Width: 180, Sortable: true, Alignment: fyne.TextAlignCenter,
+		}},
 		&state,
 		func() { sorted = true },
 	)
@@ -122,6 +133,9 @@ func TestConfigureSortableTableUsesDedicatedHeaderRow(t *testing.T) {
 	table.UpdateHeader(widget.TableCellID{Row: -1, Col: 0}, header)
 	if header.label.Text != "Name" {
 		t.Fatalf("header text = %q, want no inactive sort indicator", header.label.Text)
+	}
+	if header.label.Alignment != fyne.TextAlignCenter {
+		t.Fatalf("header alignment = %v, want center", header.label.Alignment)
 	}
 	header.target.Tapped(nil)
 	if !sorted || state.column != 0 || !state.ascending {

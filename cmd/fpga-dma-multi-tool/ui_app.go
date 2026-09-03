@@ -13,7 +13,7 @@ const repositoryURL = "https://github.com/sercanarga/fpga-dma-multi-tool"
 
 const (
 	tableHeaderHeight float32 = 34
-	tableRowHeight    float32 = 34
+	tableRowHeight    float32 = 40
 )
 
 type guiState struct {

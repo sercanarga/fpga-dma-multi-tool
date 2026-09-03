@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"net"
 	"strings"
 )
@@ -15,6 +16,7 @@ const (
 	xvcDefaultPeriodNS = uint32(2133)
 	xvcMaxDevices      = 16
 	fuseDNAInstruction = uint64(0x32)
+	deviceDNAMask      = uint64(1<<57 - 1)
 )
 
 type xvcClient struct {
@@ -139,7 +141,7 @@ func scanArtixDevices(
 			Part:         part.Name,
 			IDCode:       fmt.Sprintf("0x%08X", idcode),
 			FuseDNA:      formatFuseDNA(first),
-			DeviceDNA:    formatDeviceDNA(first),
+			DeviceDNA:    formatDeviceDNA(deviceDNAFromJTAGScan(first)),
 			BoardMatches: chainBoardMatches(idcodes, part.Family),
 			Backend:      backend,
 		})
@@ -338,6 +340,10 @@ func readBitsLSB(bits []byte, offset, count int) uint64 {
 		}
 	}
 	return value
+}
+
+func deviceDNAFromJTAGScan(value uint64) uint64 {
+	return bits.Reverse64(value) & deviceDNAMask
 }
 
 func writeAll(w io.Writer, data []byte) error {

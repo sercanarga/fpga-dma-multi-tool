@@ -46,7 +46,7 @@ func TestFPGAConfigurationDetailRowsDecodeStatusAndBootErrors(t *testing.T) {
 func TestFPGADeviceDetailRowsIncludeIdentityAndLoadingState(t *testing.T) {
 	device := deviceResult{
 		Index: 1, Part: "xc7a100t", IDCode: "0x03631093",
-		FuseDNA: "0x0123456789ABCDEF", DeviceDNA: "0x002468ACF13579",
+		FuseDNA: "0x0123456789ABCDEF", DeviceDNA: "00002468ACF13579",
 		BoardMatches: []string{"CaptainDMA_100T"}, Backend: "ch347-direct",
 		Target: "CH347[0]",
 	}
@@ -63,7 +63,7 @@ func TestFPGADeviceDetailRowsIncludeIdentityAndLoadingState(t *testing.T) {
 	}
 }
 
-func TestParseOpenFPGALoaderXADC(t *testing.T) {
+func TestParseOpenFPGALoaderXADCAcceptsProgrammerTrailingComma(t *testing.T) {
 	output := `Jtag frequency: 6000000
 {
 "temp": 44.25,
@@ -75,8 +75,9 @@ func TestParseOpenFPGALoaderXADC(t *testing.T) {
 "minvccint": 0.988,
 "vccaux": 1.803,
 "maxvccaux": 1.821,
-"minvccaux": 1.786
-}`
+"minvccaux": 1.786,
+}
+Diagnostic summary: {done}`
 	sensors, err := parseOpenFPGALoaderXADC(output)
 	if err != nil {
 		t.Fatal(err)

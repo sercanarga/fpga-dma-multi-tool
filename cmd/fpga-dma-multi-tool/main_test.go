@@ -14,6 +14,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"fyne.io/fyne/v2"
+	fyneTest "fyne.io/fyne/v2/test"
 )
 
 func TestBitPackingRoundTrip(t *testing.T) {
@@ -28,6 +31,73 @@ func TestReadBitsLSB(t *testing.T) {
 	bits := append([]byte{0, 1}, uintToBits(0x0123456789ABCDEF, 64)...)
 	if got := readBitsLSB(bits, 2, 64); got != 0x0123456789ABCDEF {
 		t.Fatalf("readBitsLSB() = 0x%016X", got)
+	}
+}
+
+func TestDeviceDNAFromJTAGScanMatchesKnownReaderValue(t *testing.T) {
+	const scanValue = uint64(0x2A10840A74A4126F)
+	const want = uint64(0x0048252E50210854)
+	if got := deviceDNAFromJTAGScan(scanValue); got != want {
+		t.Fatalf("deviceDNAFromJTAGScan() = 0x%016X, want 0x%016X", got, want)
+	}
+	if got := formatDeviceDNA(want); got != "0048252E50210854" {
+		t.Fatalf("formatDeviceDNA() = %s", got)
+	}
+}
+
+func TestDeviceTableRowsPreferCanonicalDeviceDNA(t *testing.T) {
+	rows := deviceTableRows([]deviceResult{{
+		Part:      "xc7a100t",
+		FuseDNA:   "0x2A10840A74A4126F",
+		DeviceDNA: "0048252E50210854",
+	}})
+	if len(rows) != 1 || rows[0].DNAID != "0048252E50210854" {
+		t.Fatalf("device table rows = %+v", rows)
+	}
+}
+
+func TestDeviceTableCellKeepsActionsInDedicatedLayouts(t *testing.T) {
+	application := fyneTest.NewApp()
+	defer application.Quit()
+
+	object := newDeviceTableCell()
+	cell := deviceTableCellContent(object)
+	if cell.copyButton.Text != "" || cell.copyButton.Icon == nil {
+		t.Fatalf("copy control should be icon-only: text=%q icon=%v", cell.copyButton.Text, cell.copyButton.Icon)
+	}
+	if cell.detailsButton.Text != "Detailed Info" {
+		t.Fatalf("details button text = %q", cell.detailsButton.Text)
+	}
+	if object.MinSize().Height < tableRowHeight {
+		t.Fatalf("device table cell height = %v, want at least %v", object.MinSize().Height, tableRowHeight)
+	}
+	cell.reset()
+	cell.label.SetText("XC7A100T")
+	cell.label.Show()
+	object.Resize(fyne.NewSize(200, tableRowHeight))
+	cell.container.Refresh()
+	if markup := fyneTest.RenderObjectToMarkup(object); !strings.Contains(markup, "XC7A100T") {
+		t.Fatalf("device table cell is missing from the Fyne render tree:\n%s", markup)
+	}
+}
+
+func TestDeviceTableDoubleClickTrackerRequiresSameRowWithinWindow(t *testing.T) {
+	tracker := deviceTableDoubleClickTracker{row: -1}
+	start := time.Unix(100, 0)
+	if tracker.activate(2, start) {
+		t.Fatal("first click must not activate the row")
+	}
+	if tracker.activate(3, start.Add(100*time.Millisecond)) {
+		t.Fatal("a different row must not activate the previous row")
+	}
+	if !tracker.activate(3, start.Add(300*time.Millisecond)) {
+		t.Fatal("a second click on the same row should activate it")
+	}
+	if tracker.activate(3, start.Add(350*time.Millisecond)) {
+		t.Fatal("the tracker must reset after a successful double click")
+	}
+	if tracker.activate(3, start.Add(time.Second)) {
+		t.Fatal("clicks outside the double-click window must not activate the row")
 	}
 }
 
@@ -207,6 +277,10 @@ func TestScanXVCReadsEveryArtixDeviceTwice(t *testing.T) {
 	for index, result := range results {
 		if result.FuseDNA != formatFuseDNA(dnaValues[index]) {
 			t.Errorf("result[%d].FuseDNA = %s, want %s", index, result.FuseDNA, formatFuseDNA(dnaValues[index]))
+		}
+		wantDeviceDNA := formatDeviceDNA(deviceDNAFromJTAGScan(dnaValues[index]))
+		if result.DeviceDNA != wantDeviceDNA {
+			t.Errorf("result[%d].DeviceDNA = %s, want %s", index, result.DeviceDNA, wantDeviceDNA)
 		}
 		if result.IDCode != fmt.Sprintf("0x%08X", idcodes[index]) {
 			t.Errorf("result[%d].IDCode = %s", index, result.IDCode)

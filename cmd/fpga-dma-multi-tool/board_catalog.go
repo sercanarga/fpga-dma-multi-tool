@@ -68,7 +68,7 @@ func formatFuseDNA(value uint64) string {
 }
 
 func formatDeviceDNA(value uint64) string {
-	return fmt.Sprintf("0x%015X", value>>7)
+	return fmt.Sprintf("%016X", value&deviceDNAMask)
 }
 
 func boardMatches(part string) []string {

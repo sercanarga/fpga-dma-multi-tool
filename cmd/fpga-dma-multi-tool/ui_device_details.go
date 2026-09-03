@@ -60,6 +60,7 @@ func (state *guiState) showFPGADeviceDetails(device deviceResult) {
 		func(id widget.TableCellID, object fyne.CanvasObject) {
 			cell := standardTableCellContent(object)
 			label := cell.Objects[0].(*widget.Label)
+			label.Alignment = columns[id.Col].Alignment
 			if id.Row < 0 || id.Row >= len(rows) {
 				label.SetText("")
 				return

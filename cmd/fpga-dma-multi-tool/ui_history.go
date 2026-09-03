@@ -51,10 +51,10 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 		fyne.TextStyle{Bold: true},
 	)
 	columns := []sortableTableColumn{
-		{Width: 38},
-		{Title: "State", Width: 88, Sortable: true},
+		{Width: 38, Alignment: fyne.TextAlignCenter},
+		{Title: "State", Width: 88, Sortable: true, Alignment: fyne.TextAlignCenter},
 		{Title: "Class", Width: 98, Sortable: true},
-		{Title: "Source", Width: 78, Sortable: true},
+		{Title: "Source", Width: 78, Sortable: true, Alignment: fyne.TextAlignCenter},
 		{Title: "Device", Width: 220, Sortable: true},
 		{Title: "Device ID", Width: 198, Sortable: true},
 	}
@@ -92,14 +92,16 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 			label.Truncation = fyne.TextTruncateEllipsis
 			check := widget.NewCheck("", nil)
 			check.Hide()
-			return newStandardTableCell(label, check)
+			return newStandardTableCell(label, container.NewCenter(check))
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
 			cell := standardTableCellContent(object)
 			label := cell.Objects[0].(*widget.Label)
-			check := cell.Objects[1].(*widget.Check)
+			checkArea := cell.Objects[1].(*fyne.Container)
+			check := checkArea.Objects[0].(*widget.Check)
 			if id.Col == 0 {
 				label.Hide()
+				checkArea.Show()
 				check.Show()
 				check.OnChanged = nil
 				if id.Row < 0 || id.Row >= len(entries) {
@@ -121,8 +123,9 @@ func (state *guiState) buildDeviceHistoryTab() fyne.CanvasObject {
 				}
 				return
 			}
-			check.Hide()
+			checkArea.Hide()
 			label.Show()
+			label.Alignment = columns[id.Col].Alignment
 			if id.Row < 0 || id.Row >= len(entries) {
 				label.SetText("")
 				return

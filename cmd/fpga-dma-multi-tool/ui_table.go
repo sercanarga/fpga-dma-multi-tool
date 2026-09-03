@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"image/color"
+	"math"
 	"slices"
 	"strings"
 
@@ -53,6 +54,7 @@ type sortableTableColumn struct {
 	Title           string
 	Width           float32
 	Sortable        bool
+	Alignment       fyne.TextAlign
 	ConfigureHeader func(*sortableTableHeader)
 }
 
@@ -77,7 +79,12 @@ func newSortableTableHeader() *sortableTableHeader {
 	header.check.Hide()
 	header.target = newTapTarget(nil)
 	header.target.Hide()
-	header.content = container.NewStack(header.label, header.check, header.target)
+	labelArea := container.New(
+		layout.NewCustomPaddedLayout(0, 0, 6, 6),
+		header.label,
+	)
+	checkArea := container.NewCenter(header.check)
+	header.content = container.NewStack(labelArea, checkArea, header.target)
 	header.ExtendBaseWidget(header)
 	return header
 }
@@ -134,6 +141,7 @@ func configureSortableTable(
 		columnIndex := id.Col
 		column := columns[columnIndex]
 		header := object.(*sortableTableHeader)
+		header.label.Alignment = column.Alignment
 		if column.ConfigureHeader != nil {
 			column.ConfigureHeader(header)
 			return
@@ -198,7 +206,10 @@ func compareTableInt(left, right int) int {
 
 func newStandardTableCell(objects ...fyne.CanvasObject) *fyne.Container {
 	stack := container.NewStack(objects...)
-	return container.New(&minimumHeightLayout{height: tableRowHeight}, stack)
+	return container.New(
+		&minimumHeightLayout{height: tableRowHeight, horizontalPadding: 6},
+		stack,
+	)
 }
 
 func standardTableCellContent(object fyne.CanvasObject) *fyne.Container {
@@ -259,8 +270,74 @@ func newTableViewport(table *widget.Table) fyne.CanvasObject {
 	return container.NewStack(background, tableContent, border)
 }
 
+type fillTableColumnLayout struct {
+	table        *widget.Table
+	column       int
+	fixedWidth   float32
+	minimumWidth float32
+	columnCount  int
+	lastWidth    float32
+}
+
+func fillTableColumnWidth(viewportWidth, fixedWidth, minimumWidth float32, columnCount int) float32 {
+	// The viewport uses one pixel of inner padding on each side and the
+	// table theme uses one pixel between adjacent columns.
+	width := viewportWidth - fixedWidth - 2 - float32(columnCount-1)
+	if width < minimumWidth {
+		return minimumWidth
+	}
+	return width
+}
+
+func (layout *fillTableColumnLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) == 0 {
+		return
+	}
+	width := fillTableColumnWidth(size.Width, layout.fixedWidth, layout.minimumWidth, layout.columnCount)
+	if math.Abs(float64(width-layout.lastWidth)) >= 0.5 {
+		layout.lastWidth = width
+		layout.table.SetColumnWidth(layout.column, width)
+	}
+	objects[0].Move(fyne.NewPos(0, 0))
+	objects[0].Resize(size)
+}
+
+func (layout *fillTableColumnLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	height := float32(0)
+	if len(objects) > 0 {
+		height = objects[0].MinSize().Height
+	}
+	return fyne.NewSize(
+		layout.fixedWidth+layout.minimumWidth+2+float32(layout.columnCount-1),
+		height,
+	)
+}
+
+func newFillTableColumnViewport(table *widget.Table, columns []sortableTableColumn, column int) fyne.CanvasObject {
+	minimumWidth := columns[column].Width
+	fixedWidth := float32(0)
+	for index, definition := range columns {
+		if index != column {
+			fixedWidth += definition.Width
+		}
+	}
+	viewport := newTableViewport(table)
+	return container.New(
+		&fillTableColumnLayout{
+			table:        table,
+			column:       column,
+			fixedWidth:   fixedWidth,
+			minimumWidth: minimumWidth,
+			columnCount:  len(columns),
+			lastWidth:    minimumWidth,
+		},
+		viewport,
+	)
+}
+
 type minimumHeightLayout struct {
-	height float32
+	height            float32
+	horizontalPadding float32
 }
 
 var _ fyne.Theme = (*winUITableTheme)(nil)
@@ -270,8 +347,12 @@ func (layout *minimumHeightLayout) Layout(objects []fyne.CanvasObject, size fyne
 		if !object.Visible() {
 			continue
 		}
-		object.Move(fyne.NewPos(0, 0))
-		object.Resize(size)
+		width := size.Width - layout.horizontalPadding*2
+		if width < 0 {
+			width = 0
+		}
+		object.Move(fyne.NewPos(layout.horizontalPadding, 0))
+		object.Resize(fyne.NewSize(width, size.Height))
 	}
 }
 
@@ -279,6 +360,7 @@ func (layout *minimumHeightLayout) MinSize(objects []fyne.CanvasObject) fyne.Siz
 	size := fyne.NewSize(0, layout.height)
 	for _, object := range objects {
 		minimum := object.MinSize()
+		minimum.Width += layout.horizontalPadding * 2
 		if minimum.Width > size.Width {
 			size.Width = minimum.Width
 		}

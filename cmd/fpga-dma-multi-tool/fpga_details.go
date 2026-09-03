@@ -339,9 +339,8 @@ func parseOpenFPGALoaderXADC(output string) (fpgaXADCInfo, error) {
 	if marker < 0 {
 		return fpgaXADCInfo{}, fmt.Errorf("programmer did not return XADC measurements")
 	}
-	start := strings.LastIndex(output[:marker], "{")
-	end := strings.LastIndex(output, "}")
-	if start < 0 || end <= start {
+	encodedObject, ok := balancedJSONObjectAt(output, marker)
+	if !ok {
 		return fpgaXADCInfo{}, fmt.Errorf("programmer returned malformed XADC output")
 	}
 	var encoded struct {
@@ -356,7 +355,7 @@ func parseOpenFPGALoaderXADC(output string) (fpgaXADCInfo, error) {
 		MaxVCCAUX      float64           `json:"maxvccaux"`
 		MinVCCAUX      float64           `json:"minvccaux"`
 	}
-	if err := json.Unmarshal([]byte(output[start:end+1]), &encoded); err != nil {
+	if err := json.Unmarshal(withoutJSONTrailingCommas(encodedObject), &encoded); err != nil {
 		return fpgaXADCInfo{}, fmt.Errorf("decode XADC measurements: %w", err)
 	}
 	vccbram := xadcVoltage(encoded.Raw["6"])
@@ -372,6 +371,66 @@ func parseOpenFPGALoaderXADC(output string) (fpgaXADCInfo, error) {
 		MinVCCAUX:      encoded.MinVCCAUX,
 		VCCBRAM:        vccbram,
 	}, nil
+}
+
+func balancedJSONObjectAt(output string, marker int) ([]byte, bool) {
+	if marker < 0 || marker > len(output) {
+		return nil, false
+	}
+	start := strings.LastIndex(output[:marker], "{")
+	if start < 0 {
+		return nil, false
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for index := start; index < len(output); index++ {
+		switch character := output[index]; {
+		case inString && escaped:
+			escaped = false
+		case inString && character == '\\':
+			escaped = true
+		case character == '"':
+			inString = !inString
+		case !inString && character == '{':
+			depth++
+		case !inString && character == '}':
+			depth--
+			if depth == 0 {
+				return []byte(output[start : index+1]), true
+			}
+			if depth < 0 {
+				return nil, false
+			}
+		}
+	}
+	return nil, false
+}
+
+func withoutJSONTrailingCommas(encoded []byte) []byte {
+	cleaned := make([]byte, 0, len(encoded))
+	inString := false
+	escaped := false
+	for index, character := range encoded {
+		switch {
+		case inString && escaped:
+			escaped = false
+		case inString && character == '\\':
+			escaped = true
+		case character == '"':
+			inString = !inString
+		case !inString && character == ',':
+			next := index + 1
+			for next < len(encoded) && strings.ContainsRune(" \t\r\n", rune(encoded[next])) {
+				next++
+			}
+			if next < len(encoded) && (encoded[next] == '}' || encoded[next] == ']') {
+				continue
+			}
+		}
+		cleaned = append(cleaned, character)
+	}
+	return cleaned
 }
 
 var detectedFlashPattern = regexp.MustCompile(

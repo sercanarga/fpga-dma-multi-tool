@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	fyneTheme "fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -22,6 +23,89 @@ type deviceTableRow struct {
 	Board     string
 }
 
+type deviceTableCell struct {
+	container      *fyne.Container
+	label          *widget.Label
+	dnaLabel       *widget.Label
+	dnaContent     *fyne.Container
+	copyButton     *widget.Button
+	detailsContent *fyne.Container
+	detailsButton  *widget.Button
+}
+
+const deviceTableDoubleClickWindow = 500 * time.Millisecond
+
+type deviceTableDoubleClickTracker struct {
+	row int
+	at  time.Time
+}
+
+func (tracker *deviceTableDoubleClickTracker) activate(row int, now time.Time) bool {
+	if row == tracker.row && !tracker.at.IsZero() && now.Sub(tracker.at) <= deviceTableDoubleClickWindow {
+		tracker.row = -1
+		tracker.at = time.Time{}
+		return true
+	}
+	tracker.row = row
+	tracker.at = now
+	return false
+}
+
+func newDeviceTableCell() *fyne.Container {
+	label := widget.NewLabel("")
+	label.Truncation = fyne.TextTruncateEllipsis
+
+	dnaLabel := widget.NewLabel("")
+	dnaLabel.Truncation = fyne.TextTruncateEllipsis
+	copyControl := wrapWinUISecondaryButton(
+		widget.NewButtonWithIcon("", fyneTheme.ContentCopyIcon(), nil),
+		40,
+	)
+	dnaContent := container.NewBorder(
+		nil,
+		nil,
+		nil,
+		container.NewCenter(copyControl.Object),
+		dnaLabel,
+	)
+	dnaContent.Hide()
+
+	detailsControl := newWinUISecondaryButton("Detailed Info", 116, nil)
+	detailsContent := container.NewCenter(detailsControl.Object)
+	detailsContent.Hide()
+
+	return newStandardTableCell(label, dnaContent, detailsContent)
+}
+
+func deviceTableCellContent(object fyne.CanvasObject) *deviceTableCell {
+	container := object.(*fyne.Container)
+	content := standardTableCellContent(container)
+	label := content.Objects[0].(*widget.Label)
+	dnaContent := content.Objects[1].(*fyne.Container)
+	dnaLabel := dnaContent.Objects[0].(*widget.Label)
+	copyArea := dnaContent.Objects[1].(*fyne.Container)
+	copyObject := copyArea.Objects[0]
+	detailsContent := content.Objects[2].(*fyne.Container)
+	detailsObject := detailsContent.Objects[0]
+	return &deviceTableCell{
+		container:      container,
+		label:          label,
+		dnaLabel:       dnaLabel,
+		dnaContent:     dnaContent,
+		copyButton:     winUISecondaryButtonWidget(copyObject),
+		detailsContent: detailsContent,
+		detailsButton:  winUISecondaryButtonWidget(detailsObject),
+	}
+}
+
+func (cell *deviceTableCell) reset() {
+	cell.copyButton.OnTapped = nil
+	cell.detailsButton.OnTapped = nil
+	cell.label.Hide()
+	cell.dnaContent.Hide()
+	cell.detailsContent.Hide()
+}
+
 func deviceTableRows(devices []deviceResult) []deviceTableRow {
 	rows := make([]deviceTableRow, 0, len(devices))
 	for _, device := range devices {
@@ -29,13 +113,17 @@ func deviceTableRows(devices []deviceResult) []deviceTableRow {
 		if board == "" {
 			board = "Unknown board"
 		}
+		dnaID := device.DeviceDNA
+		if dnaID == "" {
+			dnaID = device.FuseDNA
+		}
 		rows = append(rows, deviceTableRow{
 			Device:    device,
 			Index:     device.Index,
 			IndexText: fmt.Sprintf("%d", device.Index),
 			FPGA:      strings.ToUpper(partFamily(device.Part)),
 			IDCode:    device.IDCode,
-			DNAID:     device.FuseDNA,
+			DNAID:     dnaID,
 			Board:     board,
 		})
 	}
@@ -61,12 +149,12 @@ func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 	summary := widget.NewLabelWithStyle("Ready to scan", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	status, statusBar := newStatusBar("Connect the adapter and power the FPGA board.")
 	columns := []sortableTableColumn{
-		{Title: "#", Width: 44, Sortable: true},
-		{Title: "FPGA", Width: 78, Sortable: true},
-		{Title: "IDCODE", Width: 106, Sortable: true},
-		{Title: "DNA ID", Width: 160, Sortable: true},
-		{Title: "Board", Width: 216, Sortable: true},
-		{Width: 116},
+		{Title: "#", Width: 48, Sortable: true, Alignment: fyne.TextAlignCenter},
+		{Title: "FPGA", Width: 92, Sortable: true, Alignment: fyne.TextAlignCenter},
+		{Title: "IDCODE", Width: 126, Sortable: true, Alignment: fyne.TextAlignCenter},
+		{Title: "DNA ID", Width: 270, Sortable: true},
+		{Title: "Board", Width: 250, Sortable: true},
+		{Width: 138, Alignment: fyne.TextAlignCenter},
 	}
 	rows := []deviceTableRow{}
 	sortState := newTableSortState(-1, true)
@@ -77,59 +165,66 @@ func (state *guiState) buildDeviceTab() fyne.CanvasObject {
 			return len(rows), len(columns)
 		},
 		func() fyne.CanvasObject {
-			label := widget.NewLabel("")
-			label.Truncation = fyne.TextTruncateEllipsis
-			button := newWinUISecondaryButton("Detailed Info", 112, nil)
-			button.Hide()
-			return newStandardTableCell(label, button.Object)
+			return newDeviceTableCell()
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
-			cell := standardTableCellContent(object)
-			label := cell.Objects[0].(*widget.Label)
-			buttonObject := cell.Objects[1]
-			button := winUISecondaryButtonWidget(buttonObject)
+			cell := deviceTableCellContent(object)
+			cell.reset()
+			defer cell.container.Refresh()
 			if id.Row < 0 || id.Row >= len(rows) {
-				buttonObject.Hide()
-				label.Show()
-				label.SetText("")
+				cell.label.Show()
+				cell.label.SetText("")
 				return
 			}
 			row := rows[id.Row]
 			if id.Col == len(columns)-1 {
-				label.Hide()
-				buttonObject.Show()
-				button.OnTapped = func() {
+				cell.detailsContent.Show()
+				cell.detailsButton.OnTapped = func() {
 					status.SetText("Opening detailed FPGA information…")
 					state.showFPGADeviceDetails(row.Device)
 				}
 				return
 			}
-			buttonObject.Hide()
-			label.Show()
+			if id.Col == 3 {
+				cell.dnaLabel.SetText(row.DNAID)
+				cell.dnaContent.Show()
+				cell.copyButton.OnTapped = func() {
+					state.window.Clipboard().SetContent(row.DNAID)
+					status.SetText("DNA ID copied to the clipboard: " + row.DNAID)
+				}
+				return
+			}
+			cell.label.Alignment = columns[id.Col].Alignment
+			cell.label.Show()
 			switch id.Col {
 			case 0:
-				label.SetText(row.IndexText)
+				cell.label.SetText(row.IndexText)
 			case 1:
-				label.SetText(row.FPGA)
+				cell.label.SetText(row.FPGA)
 			case 2:
-				label.SetText(row.IDCode)
-			case 3:
-				label.SetText(row.DNAID)
+				cell.label.SetText(row.IDCode)
 			default:
-				label.SetText(row.Board)
+				cell.label.SetText(row.Board)
 			}
 		},
 	)
 	configureSortableTable(table, columns, &sortState, func() {
 		sortTableRows(rows, sortState, compareDeviceTableRows)
 	})
-	table.OnSelected = func(widget.TableCellID) {
+	doubleClick := deviceTableDoubleClickTracker{row: -1}
+	table.OnSelected = func(id widget.TableCellID) {
 		table.UnselectAll()
+		if id.Row < 0 || id.Row >= len(rows) || !doubleClick.activate(id.Row, time.Now()) {
+			return
+		}
+		status.SetText("Opening detailed FPGA information…")
+		state.showFPGADeviceDetails(rows[id.Row].Device)
 	}
 
 	var scanButton *widget.Button
 	scanButton = widget.NewButton("Scan device", func() {
 		scanButton.Disable()
+		doubleClick = deviceTableDoubleClickTracker{row: -1}
 		rows = nil
 		state.resultMu.Lock()
 		state.result = scanResult{}

@@ -57,11 +57,13 @@ func systemInfoRows(snapshot systemInfoSnapshot) []systemInfoTableRow {
 
 func systemInfoStateColor(state string) color.Color {
 	switch state {
-	case string(systemInfoOn):
+	case string(systemInfoOn), string(systemInfoRunning), string(systemInfoAvailable), string(systemInfoUEFI), string(systemInfoReady):
 		return currentWinUIThemeColor(winUIColorSuccess)
-	case string(systemInfoOff):
+	case string(systemInfoEnabled), string(systemInfoConfigured), string(systemInfoLegacy), string(systemInfoNotReady):
+		return currentWinUIThemeColor(winUIColorWarning)
+	case string(systemInfoOff), string(systemInfoNotPresent):
 		return currentWinUIThemeColor(winUIColorError)
-	case string(systemInfoUnavailable):
+	case string(systemInfoUnsupported), string(systemInfoUnavailable):
 		return currentWinUIThemeColor(winUIColorTextDisabled)
 	default:
 		return currentWinUIThemeColor(winUIColorAccent)
@@ -94,15 +96,21 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Bold: true},
 	)
+	system := widget.NewLabel("System: checking…")
+	firmware := widget.NewLabel("Firmware: checking…")
+	windowsVersion := widget.NewLabel("Windows: checking…")
+	system.Truncation = fyne.TextTruncateEllipsis
+	firmware.Truncation = fyne.TextTruncateEllipsis
+	windowsVersion.Truncation = fyne.TextTruncateEllipsis
 	note := widget.NewLabel(
-		"PCIe rows show the negotiated width only when the device and Windows PnP stack expose it.",
+		"Firmware values come from Windows runtime APIs. Kernel DMA availability is not a direct reading of the generic BIOS IOMMU switch.",
 	)
 	note.Wrapping = fyne.TextWrapWord
 
 	columns := []sortableTableColumn{
-		{Title: "State", Width: 80, Sortable: true},
-		{Title: "Feature or device", Width: 220, Sortable: true},
-		{Title: "Details", Width: 432, Sortable: true},
+		{Title: "State", Width: 112, Sortable: true, Alignment: fyne.TextAlignCenter},
+		{Title: "Feature or device", Width: 236, Sortable: true},
+		{Title: "Details", Width: 384, Sortable: true},
 	}
 	rows := []systemInfoTableRow{}
 	sortState := newTableSortState(-1, true)
@@ -116,6 +124,7 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 			stateText := canvas.NewText("", currentWinUIThemeColor(winUIColorTextPrimary))
 			stateText.TextSize = 14
 			stateText.TextStyle = fyne.TextStyle{Bold: true}
+			stateText.Alignment = fyne.TextAlignCenter
 			stateCell := container.New(
 				&statusLabelLayout{horizontalPadding: 8, minimumWidth: 16},
 				stateText,
@@ -145,6 +154,7 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 			}
 			stateCell.Hide()
 			label.Show()
+			label.Alignment = columns[id.Col].Alignment
 			if id.Col == 1 {
 				label.SetText(row.Feature)
 			} else {
@@ -169,6 +179,9 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 		refreshButton.SetText("Refreshing…")
 		if len(rows) == 0 {
 			processor.SetText("Processor: checking…")
+			system.SetText("System: checking…")
+			firmware.SetText("Firmware: checking…")
+			windowsVersion.SetText("Windows: checking…")
 		}
 		status.SetText("Refreshing Windows security and PCIe information…")
 		go func() {
@@ -182,6 +195,9 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 				if err != nil {
 					if len(rows) == 0 {
 						processor.SetText("Processor: unavailable")
+						system.SetText("System: unavailable")
+						firmware.SetText("Firmware: unavailable")
+						windowsVersion.SetText("Windows: unavailable")
 					}
 					status.SetText("Refresh stopped: Windows did not respond within 15 seconds.")
 					showWinUIError(state.window, err)
@@ -195,8 +211,11 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 					processorName = "Unavailable"
 				}
 				processor.SetText("Processor: " + processorName)
+				system.SetText("System: " + snapshot.SystemSummary)
+				firmware.SetText("Firmware: " + snapshot.FirmwareSummary)
+				windowsVersion.SetText("Windows: " + snapshot.WindowsSummary)
 				status.SetText(fmt.Sprintf(
-					"System information refreshed: %d security features, %d PCIe links.",
+					"System information refreshed: %d firmware and security checks, %d PCIe links.",
 					len(snapshot.Features),
 					len(snapshot.PCIeLinks),
 				))
@@ -207,16 +226,18 @@ func (state *guiState) buildSystemInfoTab() fyne.CanvasObject {
 	refreshButton.Importance = widget.HighImportance
 	top := container.NewVBox(
 		container.NewBorder(nil, nil, processor, refreshButton, nil),
+		container.NewGridWithColumns(2, system, firmware),
+		windowsVersion,
 		note,
 	)
-	body := container.NewBorder(top, nil, nil, nil, newTableViewport(table))
+	body := container.NewBorder(top, nil, nil, nil, newFillTableColumnViewport(table, columns, 2))
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		fyne.Do(refresh)
 	}()
 	return newPageFrame(
 		"System Info",
-		"Review hardware virtualization, Windows security, and negotiated PCIe link widths.",
+		"Review firmware mode, platform security runtime, and negotiated PCIe link widths.",
 		body,
 		statusBar,
 	)
