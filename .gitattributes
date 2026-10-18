@@ -1,0 +1,2 @@
+packaging/windows/runtime/** -text
+third_party/** -text

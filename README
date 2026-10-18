@@ -1,0 +1,44 @@
+FPGA DMA Multi Tool
+
+A Windows utility for Artix-7 FPGA boards. Read device information, flash
+firmware, test DMA reads and manage drivers. C++20 with native Windows controls.
+
+
+USAGE
+-----
+  Download and extract the Windows x64 package, then open
+  FPGA-DMA-Multi-Tool.exe. Keep the bundled files together.
+
+  https://github.com/sercanarga/fpga-dma-multi-tool/releases/latest
+
+  Devices         Scan boards and read IDCODE, DNA ID and FUSE_DNA.
+  Flash           Load .bit files into SRAM or write .bin files to flash.
+                  Drag and drop a firmware file to select it.
+  Speed Test      Measure DMA read performance through LeechCore.
+  Device History  Find and remove disconnected device entries.
+  System Info     View hardware, firmware and security settings.
+  Drivers         Check, install and remove supported drivers.
+
+  Requires Windows 10/11 x64. Flashing uses a CH347 or supported FTDI
+  programmer; DMA testing uses an FT601 connection.
+
+  Screenshots: https://github.com/sercanarga/fpga-dma-multi-tool/tree/main/assets/screenshots
+
+
+BUILD
+-----
+  Install CMake 3.24+ and Visual Studio with C++ desktop development tools.
+
+  cmake -S . -B build -A x64
+  cmake --build build --config Release --parallel
+  ctest --test-dir build -C Release --output-on-failure
+  cpack --config build/CPackConfig.cmake -C Release
+
+  The ZIP is written to build/package/.
+  For cross-compilation, use cmake/mingw.cmake with MinGW-w64.
+
+
+LICENSE
+-------
+  PolyForm Noncommercial License 1.0.0. See LICENSE.md.
+  Bundled dependency licenses are included in the Windows package.

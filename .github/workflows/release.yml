@@ -1,86 +1,51 @@
 name: Release
-
 on:
   push:
-    tags:
-      - "v*"
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v2.0.0
+        description: Release tag
         required: true
         type: string
-
 permissions:
   contents: write
-
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
-  quality:
-    runs-on: macos-latest
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify source and bundled runtime
-        run: make check
-
   windows:
-    needs: quality
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Validate release tag
-        shell: bash
+      - uses: actions/checkout@v7
+      - name: Validate version
+        shell: pwsh
         run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must use semantic version format, for example v2.0.0" >&2
-            exit 1
-          fi
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Fyne cross compiler
-        run: go install github.com/fyne-io/fyne-cross@v1.6.2
-
-      - name: Build Windows package
+          $source = Get-Content CMakeLists.txt -Raw
+          $match = [regex]::Match($source, 'project\(FpgaDmaMultiTool VERSION ([0-9]+\.[0-9]+\.[0-9]+)')
+          if (-not $match.Success -or $env:RELEASE_TAG -ne ('v' + $match.Groups[1].Value)) { throw 'Release tag must match CMake project version' }
+      - name: Build and test C++ package
+        shell: pwsh
         run: |
-          version="${RELEASE_TAG#v}"
-          make build-windows VERSION="$version"
-
-      - name: Verify package
-        run: unzip -t bin/FPGA-DMA-Multi-Tool-Windows-x64.zip
-
-      - name: Publish GitHub release
+          cmake -S . -B build -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          cpack --config build/CPackConfig.cmake -C Release
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+      - name: Publish release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              bin/FPGA-DMA-Multi-Tool-Windows-x64.zip \
-              --clobber
-          else
-            gh release create "$RELEASE_TAG" \
-              bin/FPGA-DMA-Multi-Tool-Windows-x64.zip \
-              --target "$GITHUB_SHA" \
-              --title "FPGA DMA Multi Tool $RELEASE_TAG" \
-              --generate-notes
-          fi
+          gh release view $env:RELEASE_TAG
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG build/package/FPGA-DMA-Multi-Tool-Windows-x64.zip --clobber
+          } else {
+            gh release create $env:RELEASE_TAG build/package/FPGA-DMA-Multi-Tool-Windows-x64.zip --target $env:GITHUB_SHA --title "FPGA DMA Multi Tool $env:RELEASE_TAG" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

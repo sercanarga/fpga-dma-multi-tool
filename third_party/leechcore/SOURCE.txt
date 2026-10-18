@@ -1,0 +1,6 @@
+LeechCore 2.23.4, Windows x64 release, unchanged SDK header and DLL.
+https://github.com/ufrisk/LeechCore/releases/tag/v2.23
+https://github.com/ufrisk/LeechCore/releases/download/v2.23/LeechCore_files_and_binaries_v2.23.4-win_x64-20261005.zip
+Archive SHA-256: 22509d980434a95663657f07e3663bc7f161f89f7532a455e0b7766f28dade23
+leechcore.dll SHA-256: 87b69a036772e58d6d9297982f6029d02ea0dbaf98c91f366e3fbb28f6045673
+leechcore.h SHA-256: d3dd1553cd3dc57e620722e6d4456e9aaa819a97066119c921db43aac1c3f6e3

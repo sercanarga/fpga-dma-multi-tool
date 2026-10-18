@@ -1,30 +1,58 @@
 name: Quality
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-
 permissions:
   contents: read
-
 concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  go:
-    runs-on: macos-latest
+  windows:
+    runs-on: windows-latest
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - uses: actions/checkout@v7
+      - name: Build and test C++
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed' }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          cpack --config build/CPackConfig.cmake -C Release
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+      - name: Verify packaged tests
+        shell: pwsh
+        run: |
+          Expand-Archive build/package/FPGA-DMA-Multi-Tool-Windows-x64.zip build/package-check
+          cmake --install build --config Release --component Tests --prefix build/package-check
+          if ($LASTEXITCODE -ne 0) { throw 'Test installation failed' }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Push-Location build/package-check
+          ./core_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          ./application_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Application tests failed' }
+          ./transport_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Transport tests failed' }
+          ./platform_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Windows integration tests failed' }
+          ./platform_tests.exe --package-check
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime checks failed' }
+          Pop-Location
+      - uses: actions/upload-artifact@v4
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify source and bundled runtime
-        run: make check
+          name: windows-preview
+          path: build/package/FPGA-DMA-Multi-Tool-Windows-x64.zip
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build with sanitizers
+        run: |
+          cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Debug -DFPGA_SANITIZERS=ON
+          cmake --build build/native --parallel
+          ctest --test-dir build/native --output-on-failure

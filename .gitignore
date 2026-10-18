@@ -1,7 +1,3 @@
 /bin/
-/.build-source/
-/.build-cygpath.exe
-/fyne-cross/
-/Icon.png
+/build/
 .DS_Store
-coverage.out
